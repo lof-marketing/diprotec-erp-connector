@@ -1,0 +1,14 @@
+{
+    "P4D-0UB10000-00": {
+        "available_qty": 12,
+        "allow_backorder": false
+    },
+    "CABLE-UTP-CAT6": {
+        "available_qty": 0,
+        "allow_backorder": true
+    },
+    "HON-1900GSR-2": {
+        "available_qty": 0,
+        "allow_backorder": false
+    }
+}

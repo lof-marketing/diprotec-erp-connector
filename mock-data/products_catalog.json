@@ -1,0 +1,44 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "sku": "P4D-0UB10000-00",
+      "name": "ZEBRA PRINTER THERMAL P4T (Standard)",
+      "description": "Producto con stock y precio normal.",
+      "prices": { "web_price": 450000, "offer_price": 0, "currency": "CLP" },
+      "stock": { "quantity": 15, "warehouse_id": "CENTRAL" },
+      "category": { "id": "PC020", "name": "IMPRESORAS" },
+      "attributes": [
+        { "name": "Marca", "value": "ZEBRA" },
+        { "name": "Conectividad", "value": "Bluetooth" }
+      ],
+      "image_filename": "P4D-0UB10000-00.jpg",
+      "active": true
+    },
+    {
+      "sku": "CABLE-UTP-CAT6",
+      "name": "BOBINA CABLE UTP (Oferta + Backorder)",
+      "description": "Producto en oferta y sin stock físico, pero permite venta.",
+      "prices": { "web_price": 95000, "offer_price": 85000, "currency": "CLP" },
+      "stock": { "quantity": 0, "warehouse_id": "CENTRAL" },
+      "category": { "id": "PC030", "name": "CONECTIVIDAD" },
+      "attributes": [
+        { "name": "Marca", "value": "DIPRONET" },
+        { "name": "Color", "value": "Gris" }
+      ],
+      "image_filename": "CABLE-UTP-CAT6.jpg",
+      "active": true
+    },
+    {
+      "sku": "HON-1900GSR-2",
+      "name": "LECTOR HONEYWELL (Sin Stock/Bloqueado)",
+      "description": "Producto agotado que no debe permitir compra.",
+      "prices": { "web_price": 120000, "offer_price": 0, "currency": "CLP" },
+      "stock": { "quantity": 0, "warehouse_id": "CENTRAL" },
+      "category": { "id": "PC021", "name": "LECTORES" },
+      "attributes": [ { "name": "Marca", "value": "HONEYWELL" } ],
+      "image_filename": "HON-1900GSR-2.jpg",
+      "active": true
+    }
+  ]
+}
