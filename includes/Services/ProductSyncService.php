@@ -1,5 +1,4 @@
 <?php
-
 namespace Diprotec\ERP\Services;
 
 use Diprotec\ERP\Interfaces\ClientInterface;
@@ -8,123 +7,119 @@ class ProductSyncService
 {
 
     private $client;
-    private $image_handler;
+    private $imageHandler;
+    private $stockValidator;
 
-    public function __construct(ClientInterface $client)
+    public function __construct(ClientInterface $client, ImageHandler $imageHandler)
     {
         $this->client = $client;
-        $this->image_handler = new ImageHandler();
-
-        // Register Admin Menu for manual sync
-        add_action('admin_menu', [$this, 'register_admin_menu']);
+        $this->imageHandler = $imageHandler;
+        $this->stockValidator = new StockValidator($client);
     }
 
-    public function register_admin_menu()
+    public function syncAllProducts()
     {
-        add_submenu_page(
-            'woocommerce',
-            'Sincronizar ERP',
-            'Sincronizar ERP',
-            'manage_options',
-            'diprotec-erp-sync',
-            [$this, 'render_admin_page']
-        );
-    }
+        // 1. Obtener datos crudos del ERP
+        $erpData = $this->client->getProducts();
 
-    public function render_admin_page()
-    {
-        if (isset($_POST['diprotec_run_sync']) && check_admin_referer('diprotec_sync_action', 'diprotec_sync_nonce')) {
-            $this->sync_products();
-            echo '<div class="notice notice-success"><p>Sincronización completada.</p></div>';
+        if (empty($erpData)) {
+            return ['status' => 'error', 'message' => 'No se recibieron datos del ERP'];
         }
 
-        ?>
-        <div class="wrap">
-            <h1>Sincronización ERP Diprotec</h1>
-            <p>Haga clic en el botón para sincronizar productos desde el ERP (Simulado).</p>
-            <form method="post">
-                <?php wp_nonce_field('diprotec_sync_action', 'diprotec_sync_nonce'); ?>
-                <input type="hidden" name="diprotec_run_sync" value="1">
-                <?php submit_button('Sincronizar Productos'); ?>
-            </form>
-        </div>
-        <?php
-    }
+        $processed = 0;
+        $errors = 0;
+        $log = [];
 
-    public function sync_products()
-    {
-        $products = $this->client->getProducts();
-
-        foreach ($products as $erp_product) {
-            $this->process_product($erp_product);
+        // 2. Iterar y procesar
+        foreach ($erpData as $item) {
+            try {
+                $this->processSingleProduct($item);
+                $processed++;
+            } catch (\Exception $e) {
+                $errors++;
+                $sku = isset($item['PRO_PARTNUMBER']) ? $item['PRO_PARTNUMBER'] : 'UNKNOWN';
+                $log[] = "Error en SKU {$sku}: " . $e->getMessage();
+            }
         }
+
+        return [
+            'status' => 'completed',
+            'processed' => $processed,
+            'errors' => $errors,
+            'details' => $log
+        ];
     }
 
-    private function process_product($erp_product)
+    private function processSingleProduct($item)
     {
-        $sku = $erp_product['sku'];
-        $product_id = wc_get_product_id_by_sku($sku);
+        // Mapear datos crudos a estructura de WooCommerce
+        $data = $this->mapProductData($item);
 
-        if ($product_id) {
-            $product = wc_get_product($product_id);
+        if (!$data['sku']) {
+            throw new \Exception("Producto sin SKU válido");
+        }
+
+        // Buscar si existe el producto por SKU
+        $productId = wc_get_product_id_by_sku($data['sku']);
+
+        if ($productId) {
+            $product = wc_get_product($productId);
         } else {
             $product = new \WC_Product_Simple();
-            $product->set_sku($sku);
         }
 
-        // Basic Fields
-        $product->set_name($erp_product['name']);
-        $product->set_description($erp_product['description']);
+        // Asignar propiedades básicas
+        $product->set_name($data['name']);
+        $product->set_sku($data['sku']);
+        $product->set_regular_price($data['price']);
 
-        // Prices
-        $product->set_regular_price($erp_product['prices']['web_price']);
-
-        $offer_price = $erp_product['prices']['offer_price'];
-        if ($offer_price > 0 && $offer_price < $erp_product['prices']['web_price']) {
-            $product->set_sale_price($offer_price);
-        } else {
-            $product->set_sale_price('');
-        }
-
-        // Stock
+        // Gestión de Inventario
         $product->set_manage_stock(true);
-        $product->set_stock_quantity($erp_product['stock']['quantity']);
+        // Validamos stock negativo o inválido antes de asignar
+        $cleanStock = $this->stockValidator->validate($data['stock']);
+        $product->set_stock_quantity($cleanStock);
 
-        // Category (Simple logic: create if not exists)
-        if (isset($erp_product['category'])) {
-            $cat_name = $erp_product['category']['name'];
-            $term = term_exists($cat_name, 'product_cat');
-            if (!$term) {
-                $term = wp_insert_term($cat_name, 'product_cat');
-            }
-            if (!is_wp_error($term) && isset($term['term_id'])) {
-                $product->set_category_ids([$term['term_id']]);
+        // Descripción (Usamos la corta si la larga está vacía)
+        $product->set_description(!empty($data['description']) ? $data['description'] : $data['short_description']);
+
+        // Manejo de Imágenes
+        if (!empty($item['IMAGE_URL'])) {
+            // Updated to use the correct method name in refactored ImageHandler
+            $imageId = $this->imageHandler->handleImage($product->get_id(), $item['IMAGE_URL']);
+            if ($imageId) {
+                $product->set_image_id($imageId);
             }
         }
-
-        // Attributes
-        if (isset($erp_product['attributes']) && is_array($erp_product['attributes'])) {
-            $attributes = [];
-            foreach ($erp_product['attributes'] as $attr) {
-                $attribute = new \WC_Product_Attribute();
-                $attribute->set_name($attr['name']);
-                $attribute->set_options([$attr['value']]);
-                $attribute->set_position(0);
-                $attribute->set_visible(true);
-                $attribute->set_variation(false);
-                $attributes[] = $attribute;
-            }
-            $product->set_attributes($attributes);
-        }
-
-        // Status
-        $product->set_status($erp_product['active'] ? 'publish' : 'draft');
 
         $product->save();
+    }
 
-        // Image
-        if (isset($erp_product['image_filename'])) {
-            $this->image_handler->handle_image($product->get_id(), $erp_product['image_filename']);
-        }
+    /**
+     * Mapea los campos del ERP (Basado en PRODUCTOS.xlsx) a WooCommerce.
+     * Esta función es CRÍTICA para que funcione el cambio el 15 de Enero.
+     */
+    private function mapProductData($erpItem)
+    {
+        // Ajuste defensivo: asegurarnos que las claves existan, si no, poner defaults
+        return [
+            // Mapeo directo de las columnas del Excel PRODUCTOS.xlsx
+            'sku' => $erpItem['PRO_PARTNUMBER'] ?? '',     // Columna F
+            'name' => $erpItem['PRO_DESCRIPCION'] ?? 'Producto sin nombre', // Columna I
+            'description' => $erpItem['PRO_DESCRIPCION'] ?? '',    // Columna I
+            'short_description' => $erpItem['PRO_ATRIBUTOS'] ?? '',      // Columna G (Atributos como desc corta)
+
+            // Lógica de Precios
+            'price' => isset($erpItem['PRECIO_VENTA']) ? $erpItem['PRECIO_VENTA'] : 0,
+
+            // Stock
+            'stock' => $erpItem['PRO_STOCK'] ?? 0, // Columna N
+
+            // Metadatos adicionales que podríamos guardar para uso futuro
+            'meta' => [
+                'pro_id' => $erpItem['PRO_ID'] ?? '',
+                'category_id' => $erpItem['PC_ID'] ?? '',
+                'subcategory_id' => $erpItem['PSC_ID'] ?? ''
+            ]
+        ];
     }
 }

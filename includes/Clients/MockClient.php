@@ -16,6 +16,7 @@ class MockClient implements ClientInterface
 
     /**
      * Get products from ERP (Mock).
+     * Updated to return data with Excel-style keys for testing.
      *
      * @param string|null $modified_after Timestamp to filter products.
      * @return array
@@ -35,7 +36,23 @@ class MockClient implements ClientInterface
             return [];
         }
 
-        return $data['data'] ?? [];
+        $products = $data['data'] ?? [];
+
+        // Transform the mock data to match the new mapping (PRO_PARTNUMBER, etc.)
+        // This simulates the real ERP response based on the provide Excel structure.
+        return array_map(function ($p) {
+            return [
+                'PRO_PARTNUMBER' => $p['sku'],
+                'PRO_DESCRIPCION' => $p['name'],
+                'PRO_ATRIBUTOS' => isset($p['attributes']) ? json_encode($p['attributes']) : '',
+                'PRECIO_VENTA' => $p['prices']['offer_price'] > 0 ? $p['prices']['offer_price'] : $p['prices']['web_price'],
+                'PRO_STOCK' => $p['stock']['quantity'],
+                'IMAGE_URL' => $p['image_filename'], // Local filename for now
+                'PRO_ID' => 'MOCK-' . $p['sku'],
+                'PC_ID' => $p['category']['id'] ?? '',
+                'PSC_ID' => ''
+            ];
+        }, $products);
     }
 
     /**

@@ -9,14 +9,31 @@ class StockValidator
 
     private $client;
 
-    public function __construct(ClientInterface $client)
+    public function __construct(ClientInterface $client = null)
     {
         $this->client = $client;
-        add_action('woocommerce_check_cart_items', [$this, 'validate_cart_stock']);
+
+        // Only add action if client is provided (for frontend/checkout validation)
+        if ($this->client) {
+            add_action('woocommerce_check_cart_items', [$this, 'validate_cart_stock']);
+        }
+    }
+
+    /**
+     * Valida y limpia el valor de stock.
+     * Asegura que no sea negativo o inválido.
+     */
+    public function validate($stock)
+    {
+        $clean = intval($stock);
+        return $clean >= 0 ? $clean : 0;
     }
 
     public function validate_cart_stock()
     {
+        if (!$this->client)
+            return;
+
         if (WC()->cart->is_empty()) {
             return;
         }
@@ -32,13 +49,8 @@ class StockValidator
 
             $stock_data = $this->client->getStock($sku);
 
-            // Logic:
-            // If available_qty >= requested qty -> OK
-            // If available_qty < requested qty AND allow_backorder is TRUE -> OK
-            // Else -> Error
-
-            $available = $stock_data['available_qty'];
-            $backorder = $stock_data['allow_backorder'];
+            $available = isset($stock_data['available_qty']) ? $stock_data['available_qty'] : 0;
+            $backorder = isset($stock_data['allow_backorder']) ? $stock_data['allow_backorder'] : false;
 
             if ($available < $qty && !$backorder) {
                 wc_add_notice(
