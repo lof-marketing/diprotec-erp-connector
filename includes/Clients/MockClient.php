@@ -16,84 +16,104 @@ class MockClient implements ClientInterface
 
     /**
      * Get products from ERP (Mock).
-     * Updated to return data with Excel-style keys for testing.
+     * Updated to return new JSON v2 structure.
      *
      * @param string|null $modified_after Timestamp to filter products.
      * @return array
      */
     public function getProducts(?string $modified_after = null): array
     {
-        $file_path = $this->mock_data_path . 'products_catalog.json';
+        // v2.0 Mock Data hardcoded or loaded from file to match JSON_Consulta_15-01.json
+        // For simplicity and robustness, I'll return the array structure directly here matching the guide examples
 
-        if (!file_exists($file_path)) {
-            return [];
-        }
-
-        $json_content = file_get_contents($file_path);
-        $data = json_decode($json_content, true);
-
-        if (!isset($data['status']) || $data['status'] !== 'success') {
-            return [];
-        }
-
-        $products = $data['data'] ?? [];
-
-        // Transform the mock data to match the new mapping (PRO_PARTNUMBER, etc.)
-        // This simulates the real ERP response based on the provide Excel structure.
-        return array_map(function ($p) {
-            return [
-                'PRO_PARTNUMBER' => $p['sku'],
-                'PRO_DESCRIPCION' => $p['name'],
-                'PRO_ATRIBUTOS' => isset($p['attributes']) ? json_encode($p['attributes']) : '',
-                'PRECIO_VENTA' => $p['prices']['offer_price'] > 0 ? $p['prices']['offer_price'] : $p['prices']['web_price'],
-                'PRO_STOCK' => $p['stock']['quantity'],
-                'IMAGE_URL' => $p['image_filename'], // Local filename for now
-                'PRO_ID' => 'MOCK-' . $p['sku'],
-                'PC_ID' => $p['category']['id'] ?? '',
-                'PSC_ID' => ''
-            ];
-        }, $products);
+        return [
+            "Estado" => 200,
+            "Respuesta" => "TRANSACCION_OK",
+            "Data" => [
+                [
+                    "CategoriaId" => "PC018",
+                    "CategoriaNombre" => "BIOMETRIA",
+                    "SubCategoriaId" => "PSC0005",
+                    "SubCategoriaNombre" => "ACCESORIOS",
+                    "Id" => "PRO-0006996",
+                    "MarcaNombre" => "ACER",
+                    "Partnumber" => "123456789",
+                    "Atributos" => "ATR1/ATR2/ATR3",
+                    "Descripcion" => "IMPRESORA ZEBRA MOCK",
+                    "ImagenPpal" => "P4D-0UB10000-00.jpg", // Reusing existing assets
+                    "Imagen01" => "CABLE-UTP-CAT6.jpg",
+                    "PrecioLista" => 163249,
+                    "PrecioOferta" => 0,
+                    "Stock" => 15
+                ],
+                [
+                    "CategoriaId" => "PC018",
+                    "CategoriaNombre" => "CONECTIVIDAD",
+                    "SubCategoriaId" => "PSC0005",
+                    "SubCategoriaNombre" => "CABLES",
+                    "Id" => "PRO-0006995",
+                    "MarcaNombre" => "DIPRONET",
+                    "Partnumber" => "CABLE-UTP-CAT6",
+                    "Atributos" => "CAT6/GRIS/300M",
+                    "Descripcion" => "BOBINA CABLE UTP",
+                    "ImagenPpal" => "CABLE-UTP-CAT6.jpg",
+                    "PrecioLista" => 95000,
+                    "PrecioOferta" => 85000,
+                    "Stock" => 0
+                ],
+                [
+                    "CategoriaId" => "PC021",
+                    "CategoriaNombre" => "LECTORES",
+                    "SubCategoriaId" => "PSC0099",
+                    "SubCategoriaNombre" => "LECTORES DE BARRA",
+                    "Id" => "PRO-0006994",
+                    "MarcaNombre" => "HONEYWELL",
+                    "Partnumber" => "HON-1900GSR-2",
+                    "Atributos" => "USB/NEGRO",
+                    "Descripcion" => "LECTOR HONEYWELL",
+                    "ImagenPpal" => "HON-1900GSR-2.jpg",
+                    "PrecioLista" => 1484080,
+                    "PrecioOferta" => 0,
+                    "Stock" => 0
+                ]
+            ],
+            "CodigoError" => null,
+            "CorrelationId" => null
+        ];
     }
 
     /**
      * Get stock for a specific SKU (Mock).
-     *
-     * @param string $sku Product SKU.
-     * @return array
      */
     public function getStock(string $sku): array
     {
         $file_path = $this->mock_data_path . 'stock_responses.json';
-
         if (!file_exists($file_path)) {
             return ['available_qty' => 0, 'allow_backorder' => false];
         }
-
         $json_content = file_get_contents($file_path);
         $data = json_decode($json_content, true);
-
         return $data[$sku] ?? ['available_qty' => 0, 'allow_backorder' => false];
     }
 
-    /**
-     * Create an order in ERP (Mock).
-     *
-     * @param array $order_payload Order data.
-     * @return array
-     */
     public function createOrder(array $order_payload): array
     {
-        // Log the payload
-        if (class_exists('WC_Logger')) {
-            $logger = wc_get_logger();
-            $logger->info('Mock Order Created: ' . print_r($order_payload, true), ['source' => 'diprotec-erp-mock']);
-        } else {
-            error_log('Mock Order Created: ' . print_r($order_payload, true));
-        }
+        return ['status' => 'success', 'erp_id' => 'MOCK-' . rand(1000, 9999)];
+    }
 
+    // Stub for v2 compatible interface check if called
+    public function getCustomerByRut($rut)
+    {
         return [
-            'status' => 'success',
-            'erp_id' => 'MOCK-' . rand(1000, 9999),
+            "success" => true,
+            "data" => [
+                "business_name" => "Empresa Mock S.A.",
+                "giro" => "Venta de Tecnología",
+                "addresses" => [
+                    ["id" => "DIR1", "address" => "Av. Mock 123", "type" => "billing"],
+                    ["id" => "DIR2", "address" => "Bodega Mock 456", "type" => "shipping"]
+                ]
+            ]
         ];
     }
 }

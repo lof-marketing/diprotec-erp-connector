@@ -19,8 +19,20 @@ class ProductSyncService
 
     public function syncAllProducts()
     {
-        // 1. Obtener datos crudos del ERP
-        $erpData = $this->client->getProducts();
+        // 1. Obtener datos crudos del ERP (Nuevo formato JSON)
+        $response = $this->client->getProducts();
+
+        // Validar estructura base de respuesta
+        if (empty($response) || !isset($response['Data'])) {
+            // Fallback para estructura simple si no viene con "Data" wrapper (por si acaso Mock antiguo)
+            if (is_array($response) && !isset($response['Data'])) {
+                $erpData = $response;
+            } else {
+                return ['status' => 'error', 'message' => 'Estructura de datos inválida'];
+            }
+        } else {
+            $erpData = $response['Data'];
+        }
 
         if (empty($erpData)) {
             return ['status' => 'error', 'message' => 'No se recibieron datos del ERP'];
@@ -37,8 +49,8 @@ class ProductSyncService
                 $processed++;
             } catch (\Exception $e) {
                 $errors++;
-                $sku = isset($item['PRO_PARTNUMBER']) ? $item['PRO_PARTNUMBER'] : 'UNKNOWN';
-                $log[] = "Error en SKU {$sku}: " . $e->getMessage();
+                $id = isset($item['Id']) ? $item['Id'] : (isset($item['Partnumber']) ? $item['Partnumber'] : 'UNKNOWN');
+                $log[] = "Error en ID {$id}: " . $e->getMessage();
             }
         }
 
@@ -52,15 +64,15 @@ class ProductSyncService
 
     private function processSingleProduct($item)
     {
-        // Mapear datos crudos a estructura de WooCommerce
-        $data = $this->mapProductData($item);
+        $erpId = $item['Id'] ?? null;
+        $sku = $item['Partnumber'] ?? '';
 
-        if (!$data['sku']) {
-            throw new \Exception("Producto sin SKU válido");
+        if (!$erpId) {
+            throw new \Exception("Producto sin ID Diprotec (Id)");
         }
 
-        // Buscar si existe el producto por SKU
-        $productId = wc_get_product_id_by_sku($data['sku']);
+        // 1. Estrategia de Búsqueda: Meta ID -> SKU -> Nuevo
+        $productId = $this->findProduct($erpId, $sku);
 
         if ($productId) {
             $product = wc_get_product($productId);
@@ -68,58 +80,156 @@ class ProductSyncService
             $product = new \WC_Product_Simple();
         }
 
-        // Asignar propiedades básicas
-        $product->set_name($data['name']);
-        $product->set_sku($data['sku']);
-        $product->set_regular_price($data['price']);
+        // Asignar ID Interno para futuras syncs
+        $product->update_meta_data('_diprotec_pro_id', $erpId);
 
-        // Gestión de Inventario
+        // 2. Campos Básicos
+        $product->set_sku($sku);
+        $product->set_name($item['Descripcion'] ?? 'Producto sin nombre');
+        $product->set_description($item['Descripcion'] ?? ''); // Descripción larga
+        // $product->set_short_description($item['Descripcion'] ?? ''); 
+
+        // 3. Precios
+        $precioLista = isset($item['PrecioLista']) ? floatval($item['PrecioLista']) : 0;
+        $precioOferta = isset($item['PrecioOferta']) ? floatval($item['PrecioOferta']) : 0;
+
+        $product->set_regular_price($precioLista);
+        if ($precioOferta > 0 && $precioOferta < $precioLista) {
+            $product->set_sale_price($precioOferta);
+        } else {
+            $product->set_sale_price('');
+        }
+
+        // 4. Stock
         $product->set_manage_stock(true);
-        // Validamos stock negativo o inválido antes de asignar
-        $cleanStock = $this->stockValidator->validate($data['stock']);
+        $cleanStock = $this->stockValidator->validate($item['Stock'] ?? 0);
         $product->set_stock_quantity($cleanStock);
 
-        // Descripción (Usamos la corta si la larga está vacía)
-        $product->set_description(!empty($data['description']) ? $data['description'] : $data['short_description']);
+        // 5. Categorías (Jerarquía)
+        $this->assignCategories($product, $item);
 
-        // Manejo de Imágenes
-        if (!empty($item['IMAGE_URL'])) {
-            // Updated to use the correct method name in refactored ImageHandler
-            $imageId = $this->imageHandler->handleImage($product->get_id(), $item['IMAGE_URL']);
-            if ($imageId) {
-                $product->set_image_id($imageId);
+        // 6. Atributos (Especificaciones) + Marca
+        $this->assignAttributes($product, $item);
+
+        $product->save();
+
+        // 7. Imágenes (v2.0 Multi-imagen con validación de performance)
+        // Pasamos el ID del producto guardado
+        $this->imageHandler->handleImagesV2($product->get_id(), $item);
+    }
+
+    private function findProduct($erpId, $sku)
+    {
+        // A. Buscar por Meta ID (Prioridad máxima)
+        $args = [
+            'post_type' => 'product',
+            'meta_key' => '_diprotec_pro_id',
+            'meta_value' => $erpId,
+            'fields' => 'ids',
+            'limit' => 1
+        ];
+        $query = get_posts($args);
+
+        if (!empty($query)) {
+            return $query[0];
+        }
+
+        // B. Buscar por SKU (Migración)
+        if ($sku) {
+            $idBySku = wc_get_product_id_by_sku($sku);
+            if ($idBySku) {
+                return $idBySku;
             }
         }
 
-        $product->save();
+        return false;
     }
 
-    /**
-     * Mapea los campos del ERP (Basado en PRODUCTOS.xlsx) a WooCommerce.
-     * Esta función es CRÍTICA para que funcione el cambio el 15 de Enero.
-     */
-    private function mapProductData($erpItem)
+    private function assignCategories($product, $item)
     {
-        // Ajuste defensivo: asegurarnos que las claves existan, si no, poner defaults
-        return [
-            // Mapeo directo de las columnas del Excel PRODUCTOS.xlsx
-            'sku' => $erpItem['PRO_PARTNUMBER'] ?? '',     // Columna F
-            'name' => $erpItem['PRO_DESCRIPCION'] ?? 'Producto sin nombre', // Columna I
-            'description' => $erpItem['PRO_DESCRIPCION'] ?? '',    // Columna I
-            'short_description' => $erpItem['PRO_ATRIBUTOS'] ?? '',      // Columna G (Atributos como desc corta)
+        // CategoriaId, CategoriaNombre, SubCategoriaId, SubCategoriaNombre
+        // Priorizamos Nombre para buscar/crear
+        $catName = $item['CategoriaNombre'] ?? null;
+        $subCatName = $item['SubCategoriaNombre'] ?? null;
 
-            // Lógica de Precios
-            'price' => isset($erpItem['PRECIO_VENTA']) ? $erpItem['PRECIO_VENTA'] : 0,
+        if (!$catName)
+            return;
 
-            // Stock
-            'stock' => $erpItem['PRO_STOCK'] ?? 0, // Columna N
+        // 1. Padre
+        $parentId = $this->getOrCreateTerm($catName, 'product_cat');
+        $categoryIds = [$parentId];
 
-            // Metadatos adicionales que podríamos guardar para uso futuro
-            'meta' => [
-                'pro_id' => $erpItem['PRO_ID'] ?? '',
-                'category_id' => $erpItem['PC_ID'] ?? '',
-                'subcategory_id' => $erpItem['PSC_ID'] ?? ''
-            ]
-        ];
+        // 2. Hijo
+        if ($subCatName) {
+            $childId = $this->getOrCreateTerm($subCatName, 'product_cat', $parentId);
+            $categoryIds[] = $childId;
+        }
+
+        $product->set_category_ids($categoryIds);
+    }
+
+    private function assignAttributes($product, $item)
+    {
+        $attributes = [];
+
+        // A. Marca (pa_marca)
+        if (!empty($item['MarcaNombre'])) {
+            $this->getOrCreateTerm($item['MarcaNombre'], 'pa_marca'); // Asegurar existencia
+
+            $attrMarca = new \WC_Product_Attribute();
+            $attrMarca->set_name('pa_marca');
+            $attrMarca->set_options([$item['MarcaNombre']]);
+            $attrMarca->set_visible(true);
+            $attrMarca->set_variation(false);
+            $attributes[] = $attrMarca;
+        }
+
+        // B. Especificaciones (pa_especificaciones) - Explode '/'
+        if (!empty($item['Atributos'])) {
+            $specs = explode('/', $item['Atributos']);
+            $specs = array_map('trim', $specs);
+            $specs = array_filter($specs);
+
+            if (!empty($specs)) {
+                // Crear términos si no existen
+                foreach ($specs as $spec) {
+                    $this->getOrCreateTerm($spec, 'pa_especificaciones');
+                }
+
+                $attrSpecs = new \WC_Product_Attribute();
+                $attrSpecs->set_name('pa_especificaciones');
+                $attrSpecs->set_options($specs);
+                $attrSpecs->set_visible(true);
+                $attrSpecs->set_variation(false);
+                $attributes[] = $attrSpecs;
+            }
+        }
+
+        $product->set_attributes($attributes);
+    }
+
+    private function getOrCreateTerm($termName, $taxonomy, $parentId = 0)
+    {
+        if (empty($termName))
+            return 0;
+
+        $term = term_exists($termName, $taxonomy, $parentId);
+
+        if ($term) {
+            return is_array($term) ? $term['term_id'] : $term;
+        }
+
+        $args = [];
+        if ($parentId > 0) {
+            $args['parent'] = $parentId;
+        }
+
+        $newTerm = wp_insert_term($termName, $taxonomy, $args);
+
+        if (!is_wp_error($newTerm)) {
+            return $newTerm['term_id'];
+        }
+
+        return 0;
     }
 }

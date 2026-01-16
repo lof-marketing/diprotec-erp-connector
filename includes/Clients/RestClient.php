@@ -5,7 +5,7 @@ use Diprotec\ERP\Interfaces\ClientInterface;
 
 /**
  * Cliente REST real para conectar con el ERP de Diprotec.
- * Utiliza wp_remote_get/post nativo de WordPress.
+ * Versión 2.0 con CorrelationLogging y Cliente Lookup.
  */
 class RestClient implements ClientInterface
 {
@@ -24,10 +24,7 @@ class RestClient implements ClientInterface
      */
     public function getProducts(?string $modified_after = null): array
     {
-        // Endpoint hipotético basado en estándares. 
-        // Se ajustará cuando llegue la doc el 15/01.
         $endpoint = '/products';
-
         return $this->request($endpoint);
     }
 
@@ -41,7 +38,17 @@ class RestClient implements ClientInterface
     }
 
     /**
-     * Crear pedido en ERP (No implementado en el archivo de referencia pero requerido por Interface)
+     * Obtiene datos del cliente por RUT (v2.0)
+     */
+    public function getCustomerByRut(string $rut): array
+    {
+        // Endpoint hipotético
+        $endpoint = '/customers/' . urlencode($rut);
+        return $this->request($endpoint);
+    }
+
+    /**
+     * Crear pedido en ERP
      */
     public function createOrder(array $order_payload): array
     {
@@ -73,16 +80,21 @@ class RestClient implements ClientInterface
         // Realizar la petición
         $response = wp_remote_request($url, $args);
 
+        // Header de Correlación (Trazabilidad v2.0)
+        $correlationId = wp_remote_retrieve_header($response, 'CorrelationId');
+        // Nota: A veces los headers son case-insensitive, wp_remote_retrieve_header lo maneja.
+
         // Manejo de errores de conexión (WP_Error)
         if (is_wp_error($response)) {
-            error_log('Diprotec ERP Error: ' . $response->get_error_message());
+            $this->logError("Diprotec ERP Connection Error: " . $response->get_error_message(), $correlationId);
             return []; // Retornar array vacío para no romper el flujo
         }
 
         // Manejo de códigos HTTP
         $code = wp_remote_retrieve_response_code($response);
         if ($code < 200 || $code >= 300) {
-            error_log("Diprotec ERP HTTP Error [$code]: " . wp_remote_retrieve_body($response));
+            $bodyMsg = wp_remote_retrieve_body($response);
+            $this->logError("Diprotec ERP HTTP Error [$code]: " . $bodyMsg, $correlationId);
             return [];
         }
 
@@ -92,10 +104,24 @@ class RestClient implements ClientInterface
 
         // Validar JSON
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('Diprotec ERP JSON Error: ' . json_last_error_msg());
+            $this->logError("Diprotec ERP JSON Error: " . json_last_error_msg(), $correlationId);
             return [];
         }
 
         return $data;
+    }
+
+    private function logError($message, $correlationId = null)
+    {
+        $logMsg = "[ERROR API] " . $message;
+        if ($correlationId) {
+            $logMsg .= " Server CorrelationId: {" . $correlationId . "}";
+        }
+
+        if (function_exists('wc_get_logger')) {
+            wc_get_logger()->error($logMsg, ['source' => 'diprotec-erp-connector']);
+        } else {
+            error_log($logMsg);
+        }
     }
 }

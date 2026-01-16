@@ -18,11 +18,71 @@ class ImageHandler
     }
 
     /**
-     * Handle image import for a product.
-     *
-     * @param int    $product_id WC Product ID.
-     * @param string $filename   Image filename or URL.
-     * @return int|bool Attachment ID on success, false on failure.
+     * Handle images v2.0 (Multi-image + Performance check)
+     */
+    public function handleImagesV2($product_id, $itemData)
+    {
+        $galleryIds = [];
+        $mainImageSet = false;
+
+        // Lista de campos de imagen
+        $imageFields = ['ImagenPpal', 'Imagen01', 'Imagen02', 'Imagen03', 'Imagen04', 'Imagen05', 'Imagen06'];
+
+        foreach ($imageFields as $field) {
+            if (empty($itemData[$field]))
+                continue;
+
+            $filename = $itemData[$field];
+            $attachmentId = $this->getOrUploadImage($product_id, $filename);
+
+            if ($attachmentId) {
+                if (!$mainImageSet && $field === 'ImagenPpal') {
+                    set_post_thumbnail($product_id, $attachmentId);
+                    $mainImageSet = true;
+                } else {
+                    $galleryIds[] = $attachmentId;
+                }
+            }
+        }
+
+        // Set gallery
+        if (!empty($galleryIds)) {
+            $product = wc_get_product($product_id);
+            if ($product) {
+                $product->set_gallery_image_ids($galleryIds);
+                $product->save();
+            }
+        }
+    }
+
+    /**
+     * Busca la imagen en la librería por nombre, si no existe la sube.
+     */
+    private function getOrUploadImage($product_id, $filename)
+    {
+        // 1. Performance Check: Buscar por título/nombre en BD
+        // El título suele ser el filename sin extensión
+        $title = preg_replace('/\.[^.]+$/', '', $filename);
+
+        $args = [
+            'post_type' => 'attachment',
+            'post_status' => 'inherit',
+            'title' => $title,
+            'posts_per_page' => 1,
+            'fields' => 'ids'
+        ];
+
+        $query = get_posts($args);
+        if (!empty($query)) {
+            return $query[0]; // Retorna ID existente
+        }
+
+        // 2. Si no existe, subir
+        return $this->handleImage($product_id, $filename);
+    }
+
+    /**
+     * Legacy method adjusted for v2 reuse
      */
     public function handleImage($product_id, $filename)
     {
@@ -46,11 +106,7 @@ class ImageHandler
             }
         }
 
-        $existing_image_id = get_post_thumbnail_id($product_id);
-        if ($existing_image_id) {
-            return $existing_image_id;
-        }
-
+        // Note: Duplicate check logic moved to getOrUploadImage, but kept simple here for direct calls
         $upload_file = wp_upload_bits($filename, null, file_get_contents($source_file));
 
         if (!$upload_file['error']) {
@@ -60,9 +116,6 @@ class ImageHandler
         return false;
     }
 
-    /**
-     * Handle remote image import.
-     */
     private function handle_remote_image($product_id, $url)
     {
         $filename = basename($url);
@@ -81,9 +134,6 @@ class ImageHandler
         return false;
     }
 
-    /**
-     * Helper to attach image to product and generate metadata.
-     */
     private function attach_image_to_product($product_id, $file_path, $filename)
     {
         $wp_filetype = wp_check_filetype($filename, null);
@@ -95,13 +145,13 @@ class ImageHandler
             'post_status' => 'inherit',
         ];
 
+        // Attach to product (parent)
         $attachment_id = wp_insert_attachment($attachment, $file_path, $product_id);
 
         if (!is_wp_error($attachment_id)) {
             require_once ABSPATH . 'wp-admin/includes/image.php';
             $attach_data = wp_generate_attachment_metadata($attachment_id, $file_path);
             wp_update_attachment_metadata($attachment_id, $attach_data);
-            set_post_thumbnail($product_id, $attachment_id);
             return $attachment_id;
         }
 
