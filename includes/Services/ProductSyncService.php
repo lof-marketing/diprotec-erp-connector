@@ -9,57 +9,114 @@ class ProductSyncService
     private $client;
     private $imageHandler;
     private $stockValidator;
+    private $temp_dir;
+    private $temp_file;
 
     public function __construct(ClientInterface $client, ImageHandler $imageHandler)
     {
         $this->client = $client;
         $this->imageHandler = $imageHandler;
         $this->stockValidator = new StockValidator($client);
+
+        $upload_dir = wp_upload_dir();
+        $this->temp_dir = trailingslashit($upload_dir['basedir']) . 'diprotec-sync';
+        $this->temp_file = $this->temp_dir . '/erp_data_cache.json';
+
+        if (!file_exists($this->temp_dir)) {
+            wp_mkdir_p($this->temp_dir);
+        }
     }
 
-    public function syncAllProducts()
+    /**
+     * PASO 1: Descargar todo el JSON y guardarlo en cache local
+     */
+    public function downloadAndCache()
     {
-        // 1. Obtener datos crudos del ERP (Nuevo formato JSON)
         $response = $this->client->getProducts();
 
-        // Validar estructura base de respuesta
         if (empty($response) || !isset($response['Data'])) {
-            // Fallback para estructura simple si no viene con "Data" wrapper (por si acaso Mock antiguo)
-            if (is_array($response) && !isset($response['Data'])) {
-                $erpData = $response;
-            } else {
-                return ['status' => 'error', 'message' => 'Estructura de datos inválida'];
-            }
-        } else {
-            $erpData = $response['Data'];
+            throw new \Exception("Estructura de API inválida o sin datos.");
         }
 
+        $erpData = $response['Data'];
+
         if (empty($erpData)) {
-            return ['status' => 'error', 'message' => 'No se recibieron datos del ERP'];
+            throw new \Exception("El ERP retornó una lista vacía.");
         }
+
+        // Guardar a archivo temporal
+        $success = file_put_contents($this->temp_file, json_encode($erpData));
+
+        if ($success === false) {
+            throw new \Exception("No se pudo escribir el archivo temporal en {$this->temp_file}");
+        }
+
+        return count($erpData);
+    }
+
+    /**
+     * PASO 2: Procesar un lote específico del archivo cacheado
+     */
+    public function syncBatch($offset = 0, $limit = 25)
+    {
+        if (!file_exists($this->temp_file)) {
+            throw new \Exception("Archivo de cache no encontrado. Reinicie la sincronización.");
+        }
+
+        $json = file_get_contents($this->temp_file);
+        $erpData = json_decode($json, true);
+
+        if (!$erpData) {
+            throw new \Exception("Error al decodificar el cache JSON.");
+        }
+
+        $total = count($erpData);
+        $batch = array_slice($erpData, $offset, $limit);
 
         $processed = 0;
         $errors = 0;
         $log = [];
 
-        // 2. Iterar y procesar
-        foreach ($erpData as $item) {
+        foreach ($batch as $item) {
             try {
                 $this->processSingleProduct($item);
                 $processed++;
             } catch (\Exception $e) {
                 $errors++;
-                $id = isset($item['Id']) ? $item['Id'] : (isset($item['Partnumber']) ? $item['Partnumber'] : 'UNKNOWN');
+                $id = $item['Id'] ?? ($item['Partnumber'] ?? 'UNKNOWN');
                 $log[] = "Error en ID {$id}: " . $e->getMessage();
             }
         }
 
         return [
-            'status' => 'completed',
             'processed' => $processed,
             'errors' => $errors,
-            'details' => $log
+            'details' => $log,
+            'is_finished' => ($offset + $limit) >= $total,
+            'current_progress' => min($offset + $limit, $total),
+            'total' => $total
         ];
+    }
+
+    /**
+     * PASO 3: Limpiar archivos temporales
+     */
+    public function cleanup()
+    {
+        if (file_exists($this->temp_file)) {
+            unlink($this->temp_file);
+        }
+        return true;
+    }
+
+    /**
+     * Legacy method (kept for potential CLI usage)
+     */
+    public function syncAllProducts()
+    {
+        // ... (Mantener por compatibilidad si es necesario, pero el flow ahora es via AJAX)
+        $count = $this->downloadAndCache();
+        return $this->syncBatch(0, $count);
     }
 
     private function processSingleProduct($item)

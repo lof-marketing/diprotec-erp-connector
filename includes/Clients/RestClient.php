@@ -24,7 +24,8 @@ class RestClient implements ClientInterface
      */
     public function getProducts(?string $modified_after = null): array
     {
-        $endpoint = '/products';
+        // Endpoint real Sandbox v1
+        $endpoint = '/api/v1/productos/GetProductos';
         return $this->request($endpoint);
     }
 
@@ -33,7 +34,8 @@ class RestClient implements ClientInterface
      */
     public function getStock(string $sku): array
     {
-        $endpoint = '/stock/' . $sku;
+        // En v1 usualmente se obtiene del listado completo o un endpoint específico si existe
+        $endpoint = '/api/v1/productos/GetStock?sku=' . urlencode($sku);
         return $this->request($endpoint);
     }
 
@@ -42,9 +44,8 @@ class RestClient implements ClientInterface
      */
     public function getCustomerByRut(string $rut): array
     {
-        // Endpoint hipotético
-        $endpoint = '/customers/' . urlencode($rut);
-        return $this->request($endpoint);
+        // Placeholder hasta que el endpoint esté disponible
+        return [];
     }
 
     /**
@@ -52,7 +53,7 @@ class RestClient implements ClientInterface
      */
     public function createOrder(array $order_payload): array
     {
-        $endpoint = '/orders';
+        $endpoint = '/api/v1/notaventa/PutNotaVenta';
         return $this->request($endpoint, 'POST', $order_payload);
     }
 
@@ -61,13 +62,14 @@ class RestClient implements ClientInterface
      */
     private function request($endpoint, $method = 'GET', $body = [])
     {
+        // Limpiar URL base y endpoint para evitar dobles slashes si es necesario
         $url = $this->baseUrl . $endpoint;
 
         $args = [
             'method' => $method,
-            'timeout' => 45, // Tiempo alto para cargas masivas
+            'timeout' => 45,
             'headers' => [
-                'Authorization' => 'Bearer ' . $this->token,
+                'X-API-KEY' => $this->token, // Cambio v1: X-API-KEY en lugar de Authorization Bearer
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
             ],
@@ -80,31 +82,26 @@ class RestClient implements ClientInterface
         // Realizar la petición
         $response = wp_remote_request($url, $args);
 
-        // Header de Correlación (Trazabilidad v2.0)
+        // Header de Correlación
         $correlationId = wp_remote_retrieve_header($response, 'CorrelationId');
-        // Nota: A veces los headers son case-insensitive, wp_remote_retrieve_header lo maneja.
 
-        // Manejo de errores de conexión (WP_Error)
         if (is_wp_error($response)) {
             $this->logError("Diprotec ERP Connection Error: " . $response->get_error_message(), $correlationId);
-            return []; // Retornar array vacío para no romper el flujo
-        }
-
-        // Manejo de códigos HTTP
-        $code = wp_remote_retrieve_response_code($response);
-        if ($code < 200 || $code >= 300) {
-            $bodyMsg = wp_remote_retrieve_body($response);
-            $this->logError("Diprotec ERP HTTP Error [$code]: " . $bodyMsg, $correlationId);
             return [];
         }
 
-        // Decodificar respuesta
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        $code = wp_remote_retrieve_response_code($response);
+        $resBody = wp_remote_retrieve_body($response);
 
-        // Validar JSON
+        if ($code < 200 || $code >= 300) {
+            $this->logError("Diprotec ERP HTTP Error [$code]: " . $resBody, $correlationId);
+            return [];
+        }
+
+        $data = json_decode($resBody, true);
+
         if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->logError("Diprotec ERP JSON Error: " . json_last_error_msg(), $correlationId);
+            $this->logError("Diprotec ERP JSON Error: " . json_last_error_msg() . " | Raw: " . substr($resBody, 0, 500), $correlationId);
             return [];
         }
 
