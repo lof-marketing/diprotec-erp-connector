@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 // CONFIGURACIÓN DEL ERP (CAMBIAR ESTOS VALORES EL 15 DE ENERO)
 // ==============================================================================
 // Define si usamos datos simulados (true) o conexión real (false)
-define('DIPROTEC_ERP_USE_MOCK', false); // <--- CAMBIAR A FALSE CUANDO TENGAS LAS CREDENCIALES
+define('DIPROTEC_ERP_USE_MOCK', true); // <--- CAMBIAR A FALSE CUANDO TENGAS LAS CREDENCIALES
 
 // Credenciales (Se llenarán el 15 de Enero)
 define('DIPROTEC_ERP_API_URL', 'http://commerce.dev.diprotec.cl'); // URL Real Sandbox
@@ -39,6 +39,7 @@ require_once DIPROTEC_ERP_PATH . 'includes/Services/ProductSyncService.php';
 require_once DIPROTEC_ERP_PATH . 'includes/Services/StockValidator.php';
 require_once DIPROTEC_ERP_PATH . 'includes/Services/ImageHandler.php';
 require_once DIPROTEC_ERP_PATH . 'includes/Services/FrontendIntegration.php';
+require_once DIPROTEC_ERP_PATH . 'includes/Services/WebhookService.php';
 
 use Diprotec\ERP\Services\ProductSyncService;
 use Diprotec\ERP\Services\ImageHandler;
@@ -76,10 +77,14 @@ class DiprotecConnector
         // Handlers AJAX para Batch Sync
         add_action('wp_ajax_diprotec_sync_init', [$this, 'ajax_sync_init']);
         add_action('wp_ajax_diprotec_sync_process_batch', [$this, 'ajax_sync_process_batch']);
+        add_action('wp_ajax_diprotec_sync_process_deletions', [$this, 'ajax_sync_process_deletions']);
         add_action('wp_ajax_diprotec_sync_cleanup', [$this, 'ajax_sync_cleanup']);
 
         // Inicializar integración frontend
         new FrontendIntegration($apiClient);
+
+        // Inicializar Webhook
+        new \Diprotec\ERP\Services\WebhookService();
 
         // Programar CRON (Desactivado por ahora hasta validar en Staging)
         // add_action('diprotec_hourly_sync', [$this->syncService, 'syncAllProducts']);
@@ -195,6 +200,18 @@ class DiprotecConnector
         try {
             $result = $this->syncService->syncBatch($offset, $limit);
             wp_send_json_success($result);
+        } catch (\Exception $e) {
+            wp_send_json_error(['message' => $e->getMessage()]);
+        }
+    }
+
+    public function ajax_sync_process_deletions()
+    {
+        check_ajax_referer('diprotec_sync_nonce', 'nonce');
+
+        try {
+            $count = $this->syncService->processDeletions();
+            wp_send_json_success(['removed' => $count]);
         } catch (\Exception $e) {
             wp_send_json_error(['message' => $e->getMessage()]);
         }

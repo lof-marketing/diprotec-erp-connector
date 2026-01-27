@@ -44,6 +44,10 @@ class ProductSyncService
             throw new \Exception("El ERP retornó una lista vacía.");
         }
 
+        // Generar un ID único para este proceso completo (timestamp)
+        $current_sync_id = time();
+        update_option('diprotec_current_sync_id', $current_sync_id);
+
         // Guardar a archivo temporal
         $success = file_put_contents($this->temp_file, json_encode($erpData));
 
@@ -140,6 +144,10 @@ class ProductSyncService
         // Asignar ID Interno para futuras syncs
         $product->update_meta_data('_diprotec_pro_id', $erpId);
 
+        // MARCAR: Guardamos el ID de esta sincronización para saber que este producto está "vivo"
+        $currentSyncId = get_option('diprotec_current_sync_id');
+        $product->update_meta_data('_diprotec_last_sync_id', $currentSyncId);
+
         // 2. Campos Básicos
         $product->set_sku($sku);
         $product->set_name($item['Descripcion'] ?? 'Producto sin nombre');
@@ -200,6 +208,53 @@ class ProductSyncService
         }
 
         return false;
+    }
+
+    /**
+     * PASO 4: Desactivar productos que no vinieron en la última sincronización.
+     */
+    public function processDeletions()
+    {
+        $current_sync_id = get_option('diprotec_current_sync_id');
+
+        if (!$current_sync_id)
+            return 0;
+
+        // Buscamos productos que TIENEN ID de Diprotec, pero su last_sync_id es DIFERENTE al actual
+        $args = [
+            'post_type' => 'product',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'post_status' => ['publish', 'private'], // Buscar en publicados y privados
+            'meta_query' => [
+                'relation' => 'AND',
+                [
+                    'key' => '_diprotec_pro_id', // Solo productos del ERP
+                    'compare' => 'EXISTS'
+                ],
+                [
+                    'key' => '_diprotec_last_sync_id',
+                    'value' => $current_sync_id,
+                    'compare' => '!=' // <--- La clave: No se actualizaron en esta vuelta
+                ]
+            ]
+        ];
+
+        $products_to_remove = get_posts($args);
+        $count = 0;
+
+        foreach ($products_to_remove as $post_id) {
+            $product = wc_get_product($post_id);
+            if ($product) {
+                // Poner en borrador y stock 0
+                $product->set_status('draft');
+                $product->set_stock_quantity(0);
+                $product->save();
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     private function assignCategories($product, $item)

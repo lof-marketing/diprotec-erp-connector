@@ -87,15 +87,30 @@
         }
 
         function finishSync() {
-            addLog('Limpiando archivos temporales...', 'success');
+            addLog('Procesando productos obsoletos (Mark and Sweep)...', 'success');
 
             $.post(diprotec_sync_params.ajax_url, {
-                action: 'diprotec_sync_cleanup',
+                action: 'diprotec_sync_process_deletions',
                 nonce: diprotec_sync_params.nonce
-            }, function () {
-                addLog('Sincronización FINALIZADA con éxito.', 'success');
-                $btn.prop('disabled', false).text('Sincronización Completada');
-                isRunning = false;
+            }, function (response) {
+                if (response.success) {
+                    addLog('Productos obsoletos procesados: ' + response.data.removed + ' desactivados.');
+                } else {
+                    addLog('Error al procesar obsolescencia: ' + response.data.message, 'error');
+                }
+
+                addLog('Limpiando archivos temporales...', 'success');
+                $.post(diprotec_sync_params.ajax_url, {
+                    action: 'diprotec_sync_cleanup',
+                    nonce: diprotec_sync_params.nonce
+                }, function () {
+                    addLog('Sincronización FINALIZADA con éxito.', 'success');
+                    $btn.prop('disabled', false).text('Sincronización Completada');
+                    isRunning = false;
+                });
+            }).fail(function () {
+                addLog('Error de red al procesar obsolescencia.', 'error');
+                stopSync();
             });
         }
 
