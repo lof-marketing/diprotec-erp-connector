@@ -88,29 +88,43 @@
 
         function finishSync() {
             addLog('Procesando productos obsoletos (Mark and Sweep)...', 'success');
+            processDeletionBatch(0);
+        }
 
+        function processDeletionBatch(offset) {
             $.post(diprotec_sync_params.ajax_url, {
                 action: 'diprotec_sync_process_deletions',
-                nonce: diprotec_sync_params.nonce
+                nonce: diprotec_sync_params.nonce,
+                offset: offset
             }, function (response) {
                 if (response.success) {
-                    addLog('Productos obsoletos procesados: ' + response.data.removed + ' desactivados.');
+                    const data = response.data;
+                    addLog('Productos obsoletos procesados lote: ' + data.processed + ' de ' + data.total);
+
+                    if (!data.is_finished) {
+                        processDeletionBatch(offset + data.processed);
+                    } else {
+                        cleanupSync();
+                    }
                 } else {
                     addLog('Error al procesar obsolescencia: ' + response.data.message, 'error');
+                    cleanupSync();
                 }
-
-                addLog('Limpiando archivos temporales...', 'success');
-                $.post(diprotec_sync_params.ajax_url, {
-                    action: 'diprotec_sync_cleanup',
-                    nonce: diprotec_sync_params.nonce
-                }, function () {
-                    addLog('Sincronización FINALIZADA con éxito.', 'success');
-                    $btn.prop('disabled', false).text('Sincronización Completada');
-                    isRunning = false;
-                });
             }).fail(function () {
                 addLog('Error de red al procesar obsolescencia.', 'error');
                 stopSync();
+            });
+        }
+
+        function cleanupSync() {
+            addLog('Limpiando archivos temporales...', 'success');
+            $.post(diprotec_sync_params.ajax_url, {
+                action: 'diprotec_sync_cleanup',
+                nonce: diprotec_sync_params.nonce
+            }, function () {
+                addLog('Sincronización FINALIZADA con éxito.', 'success');
+                $btn.prop('disabled', false).text('Sincronización Completada');
+                isRunning = false;
             });
         }
 

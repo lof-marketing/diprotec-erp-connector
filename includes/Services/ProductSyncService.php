@@ -213,7 +213,7 @@ class ProductSyncService
     /**
      * PASO 4: Desactivar productos que no vinieron en la última sincronización.
      */
-    public function processDeletions()
+    public function processDeletions($offset = 0, $limit = 50)
     {
         $current_sync_id = get_option('diprotec_current_sync_id');
 
@@ -223,7 +223,8 @@ class ProductSyncService
         // Buscamos productos que TIENEN ID de Diprotec, pero su last_sync_id es DIFERENTE al actual
         $args = [
             'post_type' => 'product',
-            'posts_per_page' => -1,
+            'posts_per_page' => $limit,
+            'offset' => $offset,
             'fields' => 'ids',
             'post_status' => ['publish', 'private'], // Buscar en publicados y privados
             'meta_query' => [
@@ -240,6 +241,14 @@ class ProductSyncService
             ]
         ];
 
+        // Necesitamos saber el total para el JS
+        $total_args = $args;
+        $total_args['posts_per_page'] = -1;
+        $total_args['offset'] = 0;
+        $total_args['fields'] = 'ids';
+        $all_to_remove = get_posts($total_args);
+        $total_to_remove = count($all_to_remove);
+
         $products_to_remove = get_posts($args);
         $count = 0;
 
@@ -254,7 +263,11 @@ class ProductSyncService
             }
         }
 
-        return $count;
+        return [
+            'processed' => $count,
+            'total' => $total_to_remove,
+            'is_finished' => ($offset + $limit) >= $total_to_remove
+        ];
     }
 
     private function assignCategories($product, $item)

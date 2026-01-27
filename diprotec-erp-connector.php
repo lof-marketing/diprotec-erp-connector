@@ -24,6 +24,7 @@ define('DIPROTEC_ERP_API_URL', 'http://commerce.dev.diprotec.cl'); // URL Real S
 define('DIPROTEC_ERP_API_TOKEN', '5edySufUVLiMxZfFX8XzUmlCJ0IpIFJev2k6d4MITADFQdYlh6dKj3J2CSGPvMYL');
 define('DIPROTEC_ERP_API_USER', ''); // Solo si se usa Basic Auth
 define('DIPROTEC_ERP_API_PASS', ''); // Solo si se usa Basic Auth
+define('DIPROTEC_ERP_WEBHOOK_SECRET', 'diprotec_secret_2026_ref_xyz'); // <--- USAR UN VALOR SEGURO EN PRODUCCIÓN
 // ==============================================================================
 
 // Path constants for consistency
@@ -209,9 +210,12 @@ class DiprotecConnector
     {
         check_ajax_referer('diprotec_sync_nonce', 'nonce');
 
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $limit = 50; // Tamaño del lote para eliminaciones
+
         try {
-            $count = $this->syncService->processDeletions();
-            wp_send_json_success(['removed' => $count]);
+            $result = $this->syncService->processDeletions($offset, $limit);
+            wp_send_json_success($result);
         } catch (\Exception $e) {
             wp_send_json_error(['message' => $e->getMessage()]);
         }

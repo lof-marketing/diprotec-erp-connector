@@ -17,9 +17,14 @@ class WebhookService
         ]);
     }
 
-    public function check_permission()
+    public function check_permission(\WP_REST_Request $request)
     {
-        // TODO: Implement security token validation
+        $secret = $request->get_header('X-Diprotec-Webhook-Secret');
+
+        if (!$secret || $secret !== DIPROTEC_ERP_WEBHOOK_SECRET) {
+            return new \WP_Error('unauthorized', 'Invalid or missing secret key', ['status' => 403]);
+        }
+
         return true;
     }
 
