@@ -20,11 +20,11 @@ if (!defined('ABSPATH')) {
 define('DIPROTEC_ERP_USE_MOCK', true); // <--- CAMBIAR A FALSE CUANDO TENGAS LAS CREDENCIALES
 
 // Credenciales (Se llenarán el 15 de Enero)
-define('DIPROTEC_ERP_API_URL', 'http://commerce.dev.diprotec.cl'); // URL Real Sandbox
+define('DIPROTEC_ERP_API_URL', 'https://commerce.diprotec.cl'); // URL Real Sandbox
 define('DIPROTEC_ERP_API_TOKEN', '5edySufUVLiMxZfFX8XzUmlCJ0IpIFJev2k6d4MITADFQdYlh6dKj3J2CSGPvMYL');
 define('DIPROTEC_ERP_API_USER', ''); // Solo si se usa Basic Auth
 define('DIPROTEC_ERP_API_PASS', ''); // Solo si se usa Basic Auth
-define('DIPROTEC_ERP_WEBHOOK_SECRET', 'diprotec_secret_2026_ref_xyz'); // <--- USAR UN VALOR SEGURO EN PRODUCCIÓN
+define('DIPROTEC_ERP_WEBHOOK_SECRET', 'mc%uM~A;PCzAkA:mwmhZ(#$7//P?a*4i'); // <--- USAR UN VALOR SEGURO EN PRODUCCIÓN
 // ==============================================================================
 
 // Path constants for consistency
