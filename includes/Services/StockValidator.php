@@ -47,7 +47,12 @@ class StockValidator
                 continue;
             }
 
-            $stock_data = $this->client->getStock($sku);
+            $erpId = $product->get_meta('_diprotec_pro_id');
+
+            // Si estamos en modo Producción y tenemos ID, lo usamos. Si no, SKU.
+            $identifier = (!DIPROTEC_ERP_USE_MOCK && $erpId) ? $erpId : $sku;
+
+            $stock_data = $this->client->getStock($identifier);
 
             $available = isset($stock_data['available_qty']) ? $stock_data['available_qty'] : 0;
             $backorder = isset($stock_data['allow_backorder']) ? $stock_data['allow_backorder'] : false;

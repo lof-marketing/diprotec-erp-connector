@@ -34,18 +34,44 @@ class RestClient implements ClientInterface
      */
     public function getStock(string $sku): array
     {
-        // En v1 usualmente se obtiene del listado completo o un endpoint específico si existe
-        $endpoint = '/api/v1/productos/GetStock?sku=' . urlencode($sku);
-        return $this->request($endpoint);
+        // Endpoint: GET /api/v1/productos/GetStock/{productoId}
+        // Usamos el SKU (o ID si se pasa como tal) en la URL
+        $endpoint = '/api/v1/productos/GetStock/' . urlencode($sku);
+
+        $response = $this->request($endpoint);
+
+        if (empty($response) || !isset($response['Data']) || empty($response['Data'])) {
+            return ['available_qty' => 0, 'allow_backorder' => false];
+        }
+
+        $stock = isset($response['Data']['Stock']) ? (int) $response['Data']['Stock'] : 0;
+
+        return [
+            'available_qty' => $stock,
+            'allow_backorder' => false
+        ];
     }
 
     /**
      * Obtiene datos del cliente por RUT (v2.0)
      */
-    public function getCustomerByRut(string $rut): array
+    public function getCustomerByRut(string $rut): ?array
     {
-        // Placeholder hasta que el endpoint esté disponible
-        return [];
+        // Limpiamos el RUT para enviarlo en la URL
+        $rutLimpio = sanitize_text_field($rut);
+
+        // Según Swagger, el RUT va como path parameter
+        $endpoint = '/api/v1/clientes/GetClientes/' . $rutLimpio;
+
+        $response = $this->request($endpoint);
+
+        // Validación basada en la estructura de respuesta del Swagger (Data es un array)
+        if (empty($response) || !isset($response['Data']) || empty($response['Data'])) {
+            return null;
+        }
+
+        // Retornamos el primer elemento del arreglo Data
+        return $response['Data'][0];
     }
 
     /**

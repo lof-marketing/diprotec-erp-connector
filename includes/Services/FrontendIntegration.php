@@ -23,28 +23,34 @@ class FrontendIntegration
         add_action('wp_enqueue_scripts', [$this, 'enqueue_checkout_scripts']);
         add_action('wp_ajax_diprotec_get_customer', [$this, 'ajax_get_customer']);
         add_action('wp_ajax_nopriv_diprotec_get_customer', [$this, 'ajax_get_customer']);
+
+        // Checkout Billing Fields
+        add_filter('woocommerce_billing_fields', [$this, 'add_billing_fields'], 20);
     }
 
     public function enqueue_checkout_scripts()
     {
         if (is_checkout() && !is_order_received_page()) {
-            // Inline script for simplicity, or could serve a separate file.
-            // Using inline for "Code in one file" preference unless complex.
             wp_register_script('diprotec-checkout', false);
             wp_enqueue_script('diprotec-checkout');
 
+            // Pasamos la URL de admin-ajax al script
+            wp_localize_script('diprotec-checkout', 'diprotec_vars', [
+                'ajax_url' => admin_url('admin-ajax.php')
+            ]);
+
             $js_code = "
             jQuery(document).ready(function($) {
-                // Ensure the event handler is attached
-                $(document).on('blur', '#billing_rut', function() {
+                $(document).on('change', '#billing_rut', function() {
                     var rut = $(this).val();
-                    if (!rut) return;
+                    if (rut.length < 8) return;
 
-                    // Indicator logic if you have one, or just simple UI blocking
-                    // $('.diprotec-loader').show(); 
+                    // Bloquear UI
+                    $('.woocommerce-checkout').addClass('processing');
+                    $('#billing_company').attr('placeholder', 'Buscando...');
 
                     $.ajax({
-                        url: '" . admin_url('admin-ajax.php') . "',
+                        url: diprotec_vars.ajax_url,
                         type: 'POST',
                         data: {
                             action: 'diprotec_get_customer',
@@ -52,22 +58,35 @@ class FrontendIntegration
                         },
                         success: function(response) {
                             if (response.success && response.data) {
-                                // Assume Data format from RestClient which wraps it or direct
-                                // If using MockClient example: { success: true, data: { business_name: ... } }
-                                // If response itself is success wrapper from wp_send_json_success ($data)
-                                // data would be the array returned by getCustomerByRut
+                                var data = response.data;
                                 
-                                var customerArgs = response.data.data; // Because wp_send_json_success wraps our array in 'data'
-                                if (!customerArgs) customerArgs = response.data; // Fallback
-
-                                if (customerArgs.business_name) {
-                                    $('#billing_company').val(customerArgs.business_name);
+                                // 1. Datos Básicos
+                                if (data.Nombre) $('#billing_company').val(data.Nombre);
+                                if (data.Giro) $('#billing_giro').val(data.Giro);
+                                
+                                // 2. Dirección (Tomamos la primera disponible)
+                                if (data.DireccionFacturacion && data.DireccionFacturacion.length > 0) {
+                                    var dir = data.DireccionFacturacion[0];
+                                    if (dir.Direccion) $('#billing_address_1').val(dir.Direccion);
+                                    if (dir.ComunaNombre) $('#billing_city').val(dir.ComunaNombre);
+                                    if (dir.Telefono) $('#billing_phone').val(dir.Telefono);
                                 }
-                                // More fields ...
+
+                                // 3. Contacto (Email)
+                                if (data.Contacto && data.Contacto.length > 0) {
+                                    if (data.Contacto[0].Email) $('#billing_email').val(data.Contacto[0].Email);
+                                }
+                                
+                                // Actualizar el checkout para recalcular envíos si cambió la dirección
+                                $('body').trigger('update_checkout');
+                            } else {
+                                console.log('Cliente no encontrado o error en API');
+                                // Opcional: Limpiar campos si no se encuentra
                             }
                         },
                         complete: function() {
-                             // $('.diprotec-loader').hide();
+                            $('.woocommerce-checkout').removeClass('processing');
+                            $('#billing_company').attr('placeholder', '');
                         }
                     });
                 });
@@ -75,6 +94,39 @@ class FrontendIntegration
             ";
             wp_add_inline_script('diprotec-checkout', $js_code);
         }
+    }
+
+    public function add_billing_fields($fields)
+    {
+        // 1. Campo RUT
+        $fields['billing_rut'] = [
+            'type' => 'text',
+            'label' => 'RUT Empresa',
+            'placeholder' => '12.345.678-9',
+            'required' => true,
+            'class' => ['form-row-wide'],
+            'priority' => 10,
+            'clear' => true
+        ];
+
+        // 2. Campo Giro (Nuevo)
+        $fields['billing_giro'] = [
+            'type' => 'text',
+            'label' => 'Giro Comercial',
+            'placeholder' => 'Ej: Venta de Hardware',
+            'required' => true,
+            'class' => ['form-row-wide'],
+            'priority' => 30, // Justo después de la empresa
+            'clear' => true
+        ];
+
+        // Ajustar Razón Social
+        if (isset($fields['billing_company'])) {
+            $fields['billing_company']['required'] = true;
+            $fields['billing_company']['priority'] = 20;
+        }
+
+        return $fields;
     }
 
     public function ajax_get_customer()

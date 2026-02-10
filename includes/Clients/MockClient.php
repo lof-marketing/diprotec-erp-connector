@@ -314,16 +314,23 @@ class MockClient implements ClientInterface
     }
 
     // Stub for v2 compatible interface check if called
-    public function getCustomerByRut($rut)
+    public function getCustomerByRut(string $rut): ?array
     {
+        // Mock returning data consistent with RestClient structure
         return [
-            "success" => true,
-            "data" => [
-                "business_name" => "Empresa Mock S.A.",
-                "giro" => "Venta de Tecnología",
-                "addresses" => [
-                    ["id" => "DIR1", "address" => "Av. Mock 123", "type" => "billing"],
-                    ["id" => "DIR2", "address" => "Bodega Mock 456", "type" => "shipping"]
+            "Rut" => $rut,
+            "Nombre" => "Empresa Mock S.A.",
+            "Giro" => "Venta de Tecnología",
+            "DireccionFacturacion" => [
+                [
+                    "Direccion" => "Av. Mock 123",
+                    "ComunaNombre" => "Santiago",
+                    "Telefono" => "22334455"
+                ]
+            ],
+            "Contacto" => [
+                [
+                    "Email" => "contacto@empresamock.cl"
                 ]
             ]
         ];

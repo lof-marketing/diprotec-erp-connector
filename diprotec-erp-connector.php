@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 // CONFIGURACIÓN DEL ERP (CAMBIAR ESTOS VALORES EL 15 DE ENERO)
 // ==============================================================================
 // Define si usamos datos simulados (true) o conexión real (false)
-define('DIPROTEC_ERP_USE_MOCK', true); // <--- CAMBIAR A FALSE CUANDO TENGAS LAS CREDENCIALES
+define('DIPROTEC_ERP_USE_MOCK', false); // <--- CAMBIAR A FALSE CUANDO TENGAS LAS CREDENCIALES
 
 // Credenciales (Se llenarán el 15 de Enero)
 define('DIPROTEC_ERP_API_URL', 'https://commerce.diprotec.cl'); // URL Real Sandbox

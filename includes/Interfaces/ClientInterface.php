@@ -2,14 +2,15 @@
 
 namespace Diprotec\ERP\Interfaces;
 
-interface ClientInterface {
+interface ClientInterface
+{
 	/**
 	 * Get products from ERP.
 	 *
 	 * @param string|null $modified_after Timestamp to filter products.
 	 * @return array
 	 */
-	public function getProducts( ?string $modified_after = null ): array;
+	public function getProducts(?string $modified_after = null): array;
 
 	/**
 	 * Get stock for a specific SKU.
@@ -17,7 +18,7 @@ interface ClientInterface {
 	 * @param string $sku Product SKU.
 	 * @return array
 	 */
-	public function getStock( string $sku ): array;
+	public function getStock(string $sku): array;
 
 	/**
 	 * Create an order in ERP.
@@ -25,5 +26,13 @@ interface ClientInterface {
 	 * @param array $order_payload Order data.
 	 * @return array
 	 */
-	public function createOrder( array $order_payload ): array;
+	public function createOrder(array $order_payload): array;
+
+	/**
+	 * Obtiene datos del cliente por RUT desde el ERP.
+	 *
+	 * @param string $rut RUT del cliente.
+	 * @return array|null
+	 */
+	public function getCustomerByRut(string $rut): ?array;
 }
