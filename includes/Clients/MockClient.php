@@ -310,7 +310,17 @@ class MockClient implements ClientInterface
 
     public function createOrder(array $order_payload): array
     {
-        return ['status' => 'success', 'erp_id' => 'MOCK-' . rand(1000, 9999)];
+        // Mock response compatible with OrderSyncService expectation
+        return [
+            "Estado" => 200,
+            "Respuesta" => "TRANSACCION_OK",
+            "Data" => [
+                "Identificador" => 'MOCK-' . rand(1000, 9999),
+                "Retorno" => 0
+            ],
+            "CodigoError" => null,
+            "CorrelationId" => "MOCK-CORR-" . uniqid()
+        ];
     }
 
     // Stub for v2 compatible interface check if called

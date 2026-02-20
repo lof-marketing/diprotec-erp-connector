@@ -41,10 +41,12 @@ require_once DIPROTEC_ERP_PATH . 'includes/Services/StockValidator.php';
 require_once DIPROTEC_ERP_PATH . 'includes/Services/ImageHandler.php';
 require_once DIPROTEC_ERP_PATH . 'includes/Services/FrontendIntegration.php';
 require_once DIPROTEC_ERP_PATH . 'includes/Services/WebhookService.php';
+require_once DIPROTEC_ERP_PATH . 'includes/Services/OrderSyncService.php';
 
 use Diprotec\ERP\Services\ProductSyncService;
 use Diprotec\ERP\Services\ImageHandler;
 use Diprotec\ERP\Services\FrontendIntegration;
+use Diprotec\ERP\Services\OrderSyncService;
 use Diprotec\ERP\Clients\RestClient;
 use Diprotec\ERP\Clients\MockClient;
 
@@ -87,6 +89,8 @@ class DiprotecConnector
         // Inicializar Webhook
         new \Diprotec\ERP\Services\WebhookService();
 
+        // Inicializar Sincronización de Pedidos
+        new OrderSyncService($apiClient);
         // Programar CRON (Desactivado por ahora hasta validar en Staging)
         // add_action('diprotec_hourly_sync', [$this->syncService, 'syncAllProducts']);
     }

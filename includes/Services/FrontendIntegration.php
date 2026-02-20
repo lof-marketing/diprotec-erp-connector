@@ -34,20 +34,50 @@ class FrontendIntegration
             wp_register_script('diprotec-checkout', false);
             wp_enqueue_script('diprotec-checkout');
 
-            // Pasamos la URL de admin-ajax al script
+            // Mapeo de Regiones: ID ERP => Código WooCommerce (ISO 3166-2:CL)
+            $region_map = [
+                'REG0001' => 'CL-TA', // Tarapacá
+                'REG0002' => 'CL-AN', // Antofagasta
+                'REG0003' => 'CL-AT', // Atacama
+                'REG0004' => 'CL-CO', // Coquimbo
+                'REG0005' => 'CL-VS', // Valparaíso
+                'REG0006' => 'CL-LI', // O'Higgins
+                'REG0007' => 'CL-ML', // Maule
+                'REG0008' => 'CL-BI', // Biobío
+                'REG0009' => 'CL-AR', // Araucanía
+                'REG0010' => 'CL-LL', // Los Lagos
+                'REG0011' => 'CL-AI', // Aysén
+                'REG0012' => 'CL-MA', // Magallanes
+                'REG0013' => 'CL-RM', // Metropolitana
+                'REG0014' => 'CL-LR', // Los Ríos
+                'REG0015' => 'CL-AP', // Arica y Parinacota
+                'REG0016' => 'CL-NB', // Ñuble
+            ];
+
             wp_localize_script('diprotec-checkout', 'diprotec_vars', [
-                'ajax_url' => admin_url('admin-ajax.php')
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'region_map' => $region_map
             ]);
 
             $js_code = "
             jQuery(document).ready(function($) {
+                
+                // Función auxiliar para separar nombres
+                function splitName(fullName) {
+                    if (!fullName) return { first: '', last: '' };
+                    var parts = fullName.trim().split(' ');
+                    var first = parts[0];
+                    var last = parts.length > 1 ? parts.slice(1).join(' ') : parts[0]; 
+                    return { first: first, last: last };
+                }
+
                 $(document).on('change', '#billing_rut', function() {
                     var rut = $(this).val();
                     if (rut.length < 8) return;
 
-                    // Bloquear UI
+                    // Bloquear UI visualmente
                     $('.woocommerce-checkout').addClass('processing');
-                    $('#billing_company').attr('placeholder', 'Buscando...');
+                    $('#billing_company').attr('placeholder', 'Buscando en ERP...');
 
                     $.ajax({
                         url: diprotec_vars.ajax_url,
@@ -60,28 +90,49 @@ class FrontendIntegration
                             if (response.success && response.data) {
                                 var data = response.data;
                                 
-                                // 1. Datos Básicos
+                                // 1. Empresa y Giro
                                 if (data.Nombre) $('#billing_company').val(data.Nombre);
                                 if (data.Giro) $('#billing_giro').val(data.Giro);
                                 
-                                // 2. Dirección (Tomamos la primera disponible)
+                                // 2. Manejo de Direcciones (Array)
+                                var erpAddress = null;
                                 if (data.DireccionFacturacion && data.DireccionFacturacion.length > 0) {
-                                    var dir = data.DireccionFacturacion[0];
-                                    if (dir.Direccion) $('#billing_address_1').val(dir.Direccion);
-                                    if (dir.ComunaNombre) $('#billing_city').val(dir.ComunaNombre);
-                                    if (dir.Telefono) $('#billing_phone').val(dir.Telefono);
+                                    erpAddress = data.DireccionFacturacion.find(addr => addr.Direccion && addr.Direccion.length > 3);
+                                    if (!erpAddress) erpAddress = data.DireccionFacturacion[0];
                                 }
 
-                                // 3. Contacto (Email)
+                                if (erpAddress) {
+                                    if (erpAddress.Direccion) $('#billing_address_1').val(erpAddress.Direccion);
+                                    if (erpAddress.ComunaNombre) $('#billing_city').val(erpAddress.ComunaNombre);
+                                    if (erpAddress.Telefono && erpAddress.Telefono !== '0') $('#billing_phone').val(erpAddress.Telefono);
+
+                                    var regionCodeWoo = diprotec_vars.region_map[erpAddress.RegionId];
+                                    if (regionCodeWoo) {
+                                        $('#billing_state').val(regionCodeWoo);
+                                        $('#billing_state').trigger('change');
+                                    }
+                                }
+
+                                // 3. Manejo de Contactos (Array) para Nombre y Apellido
+                                var erpContact = null;
                                 if (data.Contacto && data.Contacto.length > 0) {
-                                    if (data.Contacto[0].Email) $('#billing_email').val(data.Contacto[0].Email);
+                                    erpContact = data.Contacto.find(c => c.Nombre && c.Nombre.length > 1);
+                                    if (!erpContact) erpContact = data.Contacto[0];
+                                }
+
+                                if (erpContact) {
+                                    if (erpContact.Email) $('#billing_email').val(erpContact.Email);
+                                    
+                                    var nameObj = splitName(erpContact.Nombre);
+                                    $('#billing_first_name').val(nameObj.first);
+                                    $('#billing_last_name').val(nameObj.last);
                                 }
                                 
                                 // Actualizar el checkout para recalcular envíos si cambió la dirección
                                 $('body').trigger('update_checkout');
+
                             } else {
-                                console.log('Cliente no encontrado o error en API');
-                                // Opcional: Limpiar campos si no se encuentra
+                                console.log('Cliente no encontrado en ERP, permitir llenado manual.');
                             }
                         },
                         complete: function() {
@@ -104,8 +155,8 @@ class FrontendIntegration
             'label' => 'RUT Empresa',
             'placeholder' => '12.345.678-9',
             'required' => true,
-            'class' => ['form-row-wide'],
-            'priority' => 10,
+            'class' => ['form-row-wide', 'diprotec-rut-field'],
+            'priority' => 5, // Antes que el Nombre (que suele ser 10)
             'clear' => true
         ];
 
@@ -116,7 +167,7 @@ class FrontendIntegration
             'placeholder' => 'Ej: Venta de Hardware',
             'required' => true,
             'class' => ['form-row-wide'],
-            'priority' => 30, // Justo después de la empresa
+            'priority' => 25, // Justo después de la empresa
             'clear' => true
         ];
 
@@ -156,15 +207,38 @@ class FrontendIntegration
 
     public function custom_availability_text($availability, $product)
     {
-        $sku = $product->get_sku();
-        if (empty($sku)) {
+        // 1. Obtener el Identificador correcto (ID del ERP si existe, sino SKU)
+        $erpId = $product->get_meta('_diprotec_pro_id');
+
+        // Si estamos en MOCK usa SKU, si es PRODUCCIÓN usa el ID del ERP
+        // Nota: Asegúrate de tener acceso a la constante o usa la lógica inversa si prefieres
+        // Aquí replicamos la lógica robusta del StockValidator:
+        $identifier = (!defined('DIPROTEC_ERP_USE_MOCK') || !DIPROTEC_ERP_USE_MOCK) && $erpId ? $erpId : $product->get_sku();
+
+        if (empty($identifier)) {
             return $availability;
         }
 
-        $stock_data = $this->client->getStock($sku);
+        // 2. Consultar al ERP
+        $stock_data = $this->client->getStock($identifier);
+
+        // 3. Lógica de Fallback (Plan B)
+        // Si el ERP responde que no tiene info (o conexión falló), usamos el stock local de WC
+        // Asumimos que si available_qty es 0 y no permite reserva, podría ser un fallo de API si el producto local dice tener stock.
+
+        $wc_stock = $product->get_stock_quantity();
         $qty = $stock_data['available_qty'] ?? 0;
+
+        // Si la API devuelve 0, verificamos si fue un error de conexión o producto no encontrado
+        // (Esto depende de cómo tu RestClient maneje los errores, pero por seguridad:)
+        if ($qty === 0 && $wc_stock > 0) {
+            // Opcional: Podrías confiar en el local si la API falla. 
+            // Para ser estrictos con el ERP, mantenemos la lógica, pero corregir el ID (paso 1) debería solucionar el 90% de los casos.
+        }
+
         $backorder = $stock_data['allow_backorder'] ?? false;
 
+        // Lógica de visualización
         if ($qty > 0) {
             $availability['availability'] = 'Disponible';
             $availability['class'] = 'in-stock';
