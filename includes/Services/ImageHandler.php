@@ -26,7 +26,7 @@ class ImageHandler
         $mainImageSet = false;
 
         // Lista de campos de imagen
-        $imageFields = ['ImagenPpal', 'Imagen01', 'Imagen02', 'Imagen03', 'Imagen04', 'Imagen05', 'Imagen06'];
+        $imageFields = ['Imagen01', 'Imagen02', 'Imagen03', 'Imagen04', 'Imagen05', 'Imagen06'];
 
         foreach ($imageFields as $field) {
             if (empty($itemData[$field]))
@@ -36,7 +36,7 @@ class ImageHandler
             $attachmentId = $this->getOrUploadImage($product_id, $filename);
 
             if ($attachmentId) {
-                if (!$mainImageSet && $field === 'ImagenPpal') {
+                if (!$mainImageSet && $field === 'Imagen01') {
                     set_post_thumbnail($product_id, $attachmentId);
                     $mainImageSet = true;
                 } else {
@@ -153,6 +153,44 @@ class ImageHandler
             $attach_data = wp_generate_attachment_metadata($attachment_id, $file_path);
             wp_update_attachment_metadata($attachment_id, $attach_data);
             return $attachment_id;
+        }
+
+        return false;
+    }
+
+    /**
+     * Procesa documentos (PDFs) buscando si existen o subiéndolos,
+     * y retorna la URL directa del archivo.
+     */
+    public function getOrUploadDocument($product_id, $filename)
+    {
+        if (empty($filename)) {
+            return false;
+        }
+
+        // El título del attachment suele ser el filename sin extensión
+        $title = preg_replace('/\.[^.]+$/', '', $filename);
+
+        $args = [
+            'post_type' => 'attachment',
+            'post_status' => 'inherit',
+            'title' => $title,
+            'posts_per_page' => 1,
+            'fields' => 'ids'
+        ];
+
+        $query = get_posts($args);
+        $attachmentId = false;
+
+        if (!empty($query)) {
+            $attachmentId = $query[0];
+        } else {
+            // Reutilizamos handleImage porque la lógica de subida (wp_upload_bits) sirve para PDFs
+            $attachmentId = $this->handleImage($product_id, $filename);
+        }
+
+        if ($attachmentId) {
+            return wp_get_attachment_url($attachmentId);
         }
 
         return false;

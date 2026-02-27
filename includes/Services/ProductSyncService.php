@@ -181,6 +181,38 @@ class ProductSyncService
         // 7. Imágenes (v2.0 Multi-imagen con validación de performance)
         // Pasamos el ID del producto guardado
         $this->imageHandler->handleImagesV2($product->get_id(), $item);
+
+        // 8. Documentos PDF (Brochure y Manual)
+        $needs_second_save = false;
+
+        // Procesar Brochure
+        if (!empty($item['Brochure'])) {
+            $brochureUrl = $this->imageHandler->getOrUploadDocument($product->get_id(), $item['Brochure']);
+            if ($brochureUrl && $product->get_meta('_diprotec_brochure_url') !== $brochureUrl) {
+                $product->update_meta_data('_diprotec_brochure_url', $brochureUrl);
+                $needs_second_save = true;
+            }
+        } else if ($product->get_meta('_diprotec_brochure_url')) {
+            $product->delete_meta_data('_diprotec_brochure_url');
+            $needs_second_save = true;
+        }
+
+        // Procesar Manual
+        if (!empty($item['Manual'])) {
+            $manualUrl = $this->imageHandler->getOrUploadDocument($product->get_id(), $item['Manual']);
+            if ($manualUrl && $product->get_meta('_diprotec_manual_url') !== $manualUrl) {
+                $product->update_meta_data('_diprotec_manual_url', $manualUrl);
+                $needs_second_save = true;
+            }
+        } else if ($product->get_meta('_diprotec_manual_url')) {
+            $product->delete_meta_data('_diprotec_manual_url');
+            $needs_second_save = true;
+        }
+
+        // Si se actualizaron URLs de PDFs, guardamos la data meta.
+        if ($needs_second_save) {
+            $product->save();
+        }
     }
 
     private function findProduct($erpId, $sku)

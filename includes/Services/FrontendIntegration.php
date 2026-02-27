@@ -19,6 +19,9 @@ class FrontendIntegration
         // Display Attributes (Frontend Display)
         add_action('woocommerce_single_product_summary', [$this, 'display_custom_attributes'], 25);
 
+        // Display Documents (Brochure y Manual)
+        add_action('woocommerce_single_product_summary', [$this, 'display_documents'], 30);
+
         // v2.0 Checkout AJAX & Scripts
         add_action('wp_enqueue_scripts', [$this, 'enqueue_checkout_scripts']);
         add_action('wp_ajax_diprotec_get_customer', [$this, 'ajax_get_customer']);
@@ -286,5 +289,35 @@ class FrontendIntegration
         }
         echo '</ul>';
         echo '</div>';
+    }
+
+    /**
+     * Muestra botones para descargar el Brochure y/o el Manual si existen.
+     */
+    public function display_documents()
+    {
+        global $product;
+
+        $brochure = $product->get_meta('_diprotec_brochure_url');
+        $manual = $product->get_meta('_diprotec_manual_url');
+
+        if ($brochure || $manual) {
+            echo '<div class="diprotec-documents" style="margin-top: 20px; margin-bottom: 20px;">';
+            echo '<h4>Documentos:</h4>';
+            echo '<ul style="list-style: none; padding: 0; display: flex; gap: 10px; flex-wrap: wrap;">';
+
+            if ($brochure) {
+                // Generamos un botón visual para el Brochure
+                echo '<li><a href="' . esc_url($brochure) . '" target="_blank" class="button alt" style="text-decoration: none;">📄 Descargar Brochure</a></li>';
+            }
+
+            if ($manual) {
+                // Generamos un botón visual para el Manual
+                echo '<li><a href="' . esc_url($manual) . '" target="_blank" class="button alt" style="text-decoration: none;">📄 Descargar Manual</a></li>';
+            }
+
+            echo '</ul>';
+            echo '</div>';
+        }
     }
 }
