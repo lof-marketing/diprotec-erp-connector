@@ -260,33 +260,49 @@ class FrontendIntegration
     {
         global $product;
 
-        echo '<div class="diprotec-custom-attributes" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd;">';
-        echo '<h4>Especificaciones:</h4>';
-        echo '<ul>';
-
-        // Taxonomy 'pa_especificaciones'
-        $specs = wc_get_product_terms($product->get_id(), 'pa_especificaciones', array('fields' => 'names'));
-        if (!empty($specs) && !is_wp_error($specs)) {
-            foreach ($specs as $spec) {
-                echo '<li>' . esc_html($spec) . '</li>';
-            }
+        $attributes = $product->get_attributes();
+        if (empty($attributes)) {
+            return;
         }
 
-        // Fallback or other attributes
-        $attributes = $product->get_attributes();
-        foreach ($attributes as $attribute) {
-            if ($attribute->get_name() === 'pa_especificaciones')
-                continue;
+        // Mapeo manual de slugs internos a nombres amigables
+        $label_map = [
+            'pa_marca' => 'Marca',
+            'pa_especificaciones' => 'Especificaciones'
+        ];
 
+        echo '<div class="diprotec-custom-attributes" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd;">';
+        echo '<h4>Información del Producto:</h4>';
+        echo '<ul style="margin-bottom: 0;">';
+
+        foreach ($attributes as $attribute) {
+            $name = $attribute->get_name();
+
+            // 1. Determinar la etiqueta a mostrar
+            $display_label = isset($label_map[$name]) ? $label_map[$name] : wc_attribute_label($name);
+
+            // Limpieza de seguridad: si sigue empezando con pa_, quitamos el prefijo y capitalizamos
+            if (strpos($display_label, 'pa_') === 0) {
+                $display_label = ucfirst(str_replace('pa_', '', $display_label));
+            }
+
+            // 2. Obtener los valores (términos)
+            $values = [];
             if ($attribute->is_taxonomy()) {
-                $terms = wc_get_product_terms($product->get_id(), $attribute->get_name(), array('fields' => 'names'));
+                $terms = wc_get_product_terms($product->get_id(), $name, array('fields' => 'names'));
                 if (!is_wp_error($terms)) {
-                    echo '<li><strong>' . wc_attribute_label($attribute->get_name()) . ':</strong> ' . implode(', ', $terms) . '</li>';
+                    $values = $terms;
                 }
             } else {
-                echo '<li><strong>' . $attribute->get_name() . ':</strong> ' . implode(', ', $attribute->get_options()) . '</li>';
+                $values = $attribute->get_options();
+            }
+
+            // 3. Renderizar la línea
+            if (!empty($values)) {
+                echo '<li><strong>' . esc_html($display_label) . ':</strong> ' . esc_html(implode(', ', $values)) . '</li>';
             }
         }
+
         echo '</ul>';
         echo '</div>';
     }

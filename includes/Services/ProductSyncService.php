@@ -150,8 +150,8 @@ class ProductSyncService
 
         // 2. Campos Básicos
         $product->set_sku($sku);
-        $product->set_name($item['Descripcion'] ?? 'Producto sin nombre');
-        $product->set_description($item['Descripcion'] ?? ''); // Descripción larga
+        $product->set_name($item['WebNombre'] ?? 'Producto sin nombre');
+        $product->set_description($item['WebDescripcion'] ?? ''); // Descripción larga
         // $product->set_short_description($item['Descripcion'] ?? ''); 
 
         // 3. Precios
@@ -342,8 +342,8 @@ class ProductSyncService
         }
 
         // B. Especificaciones (pa_especificaciones) - Explode '/'
-        if (!empty($item['Atributos'])) {
-            $specs = explode('/', $item['Atributos']);
+        if (!empty($item['WebAtributos'])) {
+            $specs = explode('/', $item['WebAtributos']);
             $specs = array_map('trim', $specs);
             $specs = array_filter($specs);
 
