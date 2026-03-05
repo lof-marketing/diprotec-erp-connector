@@ -65,18 +65,26 @@ class FrontendIntegration
             $js_code = "
             jQuery(document).ready(function($) {
                 
-                // Función auxiliar para separar nombres
-                function splitName(fullName) {
-                    if (!fullName) return { first: '', last: '' };
-                    var parts = fullName.trim().split(' ');
-                    var first = parts[0];
-                    var last = parts.length > 1 ? parts.slice(1).join(' ') : parts[0]; 
-                    return { first: first, last: last };
+                // Función para formatear el RUT (sin puntos, con guión)
+                function formatRut(rut) {
+                    // Eliminar todo lo que no sea número o la letra K (mayúscula o minúscula)
+                    var cleanRut = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+                    if (cleanRut.length < 2) return cleanRut;
+                    
+                    // Separar el cuerpo del dígito verificador
+                    var body = cleanRut.slice(0, -1);
+                    var dv = cleanRut.slice(-1);
+                    
+                    return body + '-' + dv;
                 }
 
                 $(document).on('change', '#billing_rut', function() {
-                    var rut = $(this).val();
-                    if (rut.length < 8) return;
+                    var rawRut = $(this).val();
+                    if (rawRut.length < 3) return;
+
+                    // 1. Formatear y actualizar el campo visualmente
+                    var rut = formatRut(rawRut);
+                    $(this).val(rut);
 
                     // Bloquear UI visualmente
                     $('.woocommerce-checkout').addClass('processing');
@@ -87,7 +95,7 @@ class FrontendIntegration
                         type: 'POST',
                         data: {
                             action: 'diprotec_get_customer',
-                            rut: rut
+                            rut: rut // Enviamos el RUT ya formateado
                         },
                         success: function(response) {
                             if (response.success && response.data) {
@@ -126,9 +134,11 @@ class FrontendIntegration
                                 if (erpContact) {
                                     if (erpContact.Email) $('#billing_email').val(erpContact.Email);
                                     
+                                    /* SE ELIMINA LA INYECCIÓN DE NOMBRE Y APELLIDO A PETICIÓN
                                     var nameObj = splitName(erpContact.Nombre);
                                     $('#billing_first_name').val(nameObj.first);
                                     $('#billing_last_name').val(nameObj.last);
+                                    */
                                 }
                                 
                                 // Actualizar el checkout para recalcular envíos si cambió la dirección
@@ -185,7 +195,15 @@ class FrontendIntegration
 
     public function ajax_get_customer()
     {
-        $rut = isset($_POST['rut']) ? sanitize_text_field($_POST['rut']) : '';
+        $raw_rut = isset($_POST['rut']) ? sanitize_text_field($_POST['rut']) : '';
+
+        // Limpiar en backend por seguridad (Dejar solo números y K, luego armar con guión)
+        $clean_rut = preg_replace('/[^0-9kK]/', '', strtoupper($raw_rut));
+        if (strlen($clean_rut) > 1) {
+            $rut = substr($clean_rut, 0, -1) . '-' . substr($clean_rut, -1);
+        } else {
+            $rut = $clean_rut;
+        }
 
         if (empty($rut)) {
             wp_send_json_error(['message' => 'RUT vacío']);
@@ -193,10 +211,6 @@ class FrontendIntegration
 
         if (method_exists($this->client, 'getCustomerByRut')) {
             $data = $this->client->getCustomerByRut($rut);
-
-            // Allow MockClient to return full structure or just data
-            // If it returns ['success' => true, 'data' => ...], extract data
-            // If it returns just array of fields, use it.
 
             if ($data) {
                 wp_send_json_success($data);

@@ -40,7 +40,16 @@ class OrderSyncService
 
         // 1. Preparar Datos del Cliente
         // Obtenemos RUT y Giro desde los meta fields guardados por FrontendIntegration
-        $rut = $order->get_meta('_billing_rut') ?: '66666666-6'; // Fallback si no hay RUT
+        $raw_rut = $order->get_meta('_billing_rut') ?: '66666666-6'; // Fallback si no hay RUT
+
+        // Formatear RUT: Solo números y K, añadir guión antes del dígito verificador
+        $clean_rut = preg_replace('/[^0-9kK]/', '', strtoupper($raw_rut));
+        if (strlen($clean_rut) > 1) {
+            $rut = substr($clean_rut, 0, -1) . '-' . substr($clean_rut, -1);
+        } else {
+            $rut = $clean_rut;
+        }
+
         $giro = $order->get_meta('_billing_giro') ?: 'Particular';
 
         // 2. Preparar Dirección (Mapeo básico WC -> ERP)
