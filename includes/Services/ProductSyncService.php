@@ -312,6 +312,13 @@ class ProductSyncService
         if (!$catName)
             return;
 
+        // === NUEVO: Formateamos los nombres antes de usarlos ===
+        $catName = $this->formatSentenceCase($catName);
+        if ($subCatName) {
+            $subCatName = $this->formatSentenceCase($subCatName);
+        }
+        // =======================================================
+
         // 1. Padre
         $parentId = $this->getOrCreateTerm($catName, 'product_cat');
         $categoryIds = [$parentId];
@@ -388,5 +395,26 @@ class ProductSyncService
         }
 
         return 0;
+    }
+
+    /**
+     * Convierte un texto a formato "Sentence case" (Primera mayúscula, resto minúscula).
+     * Soporta caracteres especiales en español (tildes, eñes).
+     */
+    private function formatSentenceCase($string)
+    {
+        if (empty($string)) {
+            return $string;
+        }
+
+        // 1. Limpiamos espacios en blanco y pasamos todo a minúsculas respetando acentos
+        $lowerString = mb_strtolower(trim($string), 'UTF-8');
+
+        // 2. Extraemos la primera letra y el resto del texto
+        $firstChar = mb_substr($lowerString, 0, 1, 'UTF-8');
+        $restOfString = mb_substr($lowerString, 1, null, 'UTF-8');
+
+        // 3. Convertimos la primera letra a mayúscula y unimos todo
+        return mb_strtoupper($firstChar, 'UTF-8') . $restOfString;
     }
 }
