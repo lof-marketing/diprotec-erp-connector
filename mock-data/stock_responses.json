@@ -1,14 +1,34 @@
 {
-    "P4D-0UB10000-00": {
-        "available_qty": 12,
-        "allow_backorder": false
-    },
-    "CABLE-UTP-CAT6": {
+    "CD-415": {
         "available_qty": 0,
         "allow_backorder": true
     },
-    "HON-1900GSR-2": {
+    "IFJ-BIG": {
+        "available_qty": 48,
+        "allow_backorder": false
+    },
+    "IFJ-E-TYPE": {
+        "available_qty": 4,
+        "allow_backorder": false
+    },
+    "SLP-TX400EG": {
+        "available_qty": 107,
+        "allow_backorder": false
+    },
+    "PRO-0005724": {
         "available_qty": 0,
+        "allow_backorder": true
+    },
+    "PRO-0004574": {
+        "available_qty": 48,
+        "allow_backorder": false
+    },
+    "PRO-0004209": {
+        "available_qty": 4,
+        "allow_backorder": false
+    },
+    "PRO-0003284": {
+        "available_qty": 107,
         "allow_backorder": false
     }
 }

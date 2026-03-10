@@ -1,0 +1,19 @@
+{
+    "success": {
+        "Estado": 200,
+        "Respuesta": "TRANSACCION_OK",
+        "Data": {
+            "Identificador": "ERP-12345",
+            "Retorno": 0
+        },
+        "CodigoError": null,
+        "CorrelationId": "MOCK-CORR-ORDER-54321"
+    },
+    "error": {
+        "Estado": 400,
+        "Respuesta": "TRANSACCION_ERROR",
+        "Data": null,
+        "CodigoError": "ERR_PRODUCTO_AGOTADO",
+        "CorrelationId": "MOCK-CORR-ORDER-ERROR"
+    }
+}

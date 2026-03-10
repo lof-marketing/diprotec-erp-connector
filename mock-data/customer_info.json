@@ -1,0 +1,82 @@
+{
+    "12345678-9": {
+        "Estado": 200,
+        "Respuesta": "TRANSACCION_OK",
+        "Data": [
+            {
+                "Rut": "12345678-9",
+                "Nombre": "LOF Marketing SpA",
+                "Giro": "Agencia de Marketing y Desarrollo",
+                "Banda": "P1",
+                "Fecha": "2024-01-01",
+                "Vigente": 1,
+                "DireccionFacturacion": [
+                    {
+                        "Direccion": "Av. Vitacura 2670, Of. 301",
+                        "Telefono": "221234567",
+                        "RegionId": "REG0013",
+                        "RegionNombre": "METROPOLITANA",
+                        "ProvinciaId": "PROV0001",
+                        "ProvinciaNombre": "SANTIAGO",
+                        "ComunaId": "COM0001",
+                        "ComunaNombre": "VITACURA",
+                        "Fecha": "2024-01-01",
+                        "Vigente": 1
+                    }
+                ],
+                "Contacto": [
+                    {
+                        "Nombre": "Juan Pérez",
+                        "Email": "juan.perez@lofmarketing.com",
+                        "Cargo": "Gerente General",
+                        "Telefono": "987654321",
+                        "Fecha": "2024-01-01",
+                        "Vigente": 1
+                    }
+                ]
+            }
+        ],
+        "CodigoError": null,
+        "CorrelationId": "MOCK-CORR-123456789"
+    },
+    "76543210-K": {
+        "Estado": 200,
+        "Respuesta": "TRANSACCION_OK",
+        "Data": [
+            {
+                "Rut": "76543210-K",
+                "Nombre": "Empresa de Pruebas S.A.",
+                "Giro": "Comercio Mayorista",
+                "Banda": "P2",
+                "Fecha": "2024-01-01",
+                "Vigente": 1,
+                "DireccionFacturacion": [
+                    {
+                        "Direccion": "Calle Falsa 123",
+                        "Telefono": "229876543",
+                        "RegionId": "REG0005",
+                        "RegionNombre": "VALPARAISO",
+                        "ProvinciaId": "PROV0005",
+                        "ProvinciaNombre": "VALPARAISO",
+                        "ComunaId": "COM0005",
+                        "ComunaNombre": "VALPARAISO",
+                        "Fecha": "2024-01-01",
+                        "Vigente": 1
+                    }
+                ],
+                "Contacto": [
+                    {
+                        "Nombre": "Maria Garcia",
+                        "Email": "mgarcia@pruebas.cl",
+                        "Cargo": "Adquisiciones",
+                        "Telefono": "912345678",
+                        "Fecha": "2024-01-01",
+                        "Vigente": 1
+                    }
+                ]
+            }
+        ],
+        "CodigoError": null,
+        "CorrelationId": "MOCK-CORR-76543210K"
+    }
+}
