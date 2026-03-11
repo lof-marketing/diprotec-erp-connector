@@ -14,17 +14,23 @@ if (!defined('ABSPATH')) {
 }
 
 // ==============================================================================
-// CONFIGURACIÓN DEL ERP (CAMBIAR ESTOS VALORES EL 15 DE ENERO)
+// CONFIGURACIÓN DEL ERP (DINÁMICA DESDE BASE DE DATOS)
 // ==============================================================================
-// Define si usamos datos simulados (true) o conexión real (false)
-define('DIPROTEC_ERP_USE_MOCK', false); // <--- CAMBIAR A FALSE CUANDO TENGAS LAS CREDENCIALES
+// Las constantes ahora se alimentan de la base de datos de WordPress.
+// Opcionalmente, se pueden definir en wp-config.php para mayor seguridad.
 
-// Credenciales (Se llenarán el 15 de Enero)
-define('DIPROTEC_ERP_API_URL', 'https://commerce.diprotec.cl'); // URL Real Sandbox
-define('DIPROTEC_ERP_API_TOKEN', '5edySufUVLiMxZfFX8XzUmlCJ0IpIFJev2k6d4MITADFQdYlh6dKj3J2CSGPvMYL');
-define('DIPROTEC_ERP_API_USER', ''); // Solo si se usa Basic Auth
-define('DIPROTEC_ERP_API_PASS', ''); // Solo si se usa Basic Auth
-define('DIPROTEC_ERP_WEBHOOK_SECRET', 'mc%uM~A;PCzAkA:mwmhZ(#$7//P?a*4i'); // <--- USAR UN VALOR SEGURO EN PRODUCCIÓN
+if (!defined('DIPROTEC_ERP_USE_MOCK')) {
+    define('DIPROTEC_ERP_USE_MOCK', get_option('diprotec_erp_use_mock', '1') === '1');
+}
+if (!defined('DIPROTEC_ERP_API_URL')) {
+    define('DIPROTEC_ERP_API_URL', get_option('diprotec_erp_api_url', 'https://commerce.diprotec.cl'));
+}
+if (!defined('DIPROTEC_ERP_API_TOKEN')) {
+    define('DIPROTEC_ERP_API_TOKEN', get_option('diprotec_erp_api_token', ''));
+}
+if (!defined('DIPROTEC_ERP_WEBHOOK_SECRET')) {
+    define('DIPROTEC_ERP_WEBHOOK_SECRET', get_option('diprotec_erp_webhook_secret', ''));
+}
 // ==============================================================================
 
 // Path constants for consistency
@@ -93,6 +99,9 @@ class DiprotecConnector
         new OrderSyncService($apiClient);
         // Programar CRON (Desactivado por ahora hasta validar en Staging)
         // add_action('diprotec_hourly_sync', [$this->syncService, 'syncAllProducts']);
+
+        // Registrar configuración en WordPress
+        add_action('admin_init', [$this, 'register_settings']);
     }
 
     public function enqueue_admin_assets($hook)
@@ -128,6 +137,7 @@ class DiprotecConnector
 
     public function add_admin_menu()
     {
+        // Menú principal (Sincronización)
         add_menu_page(
             'Diprotec ERP',
             'Diprotec ERP',
@@ -136,6 +146,16 @@ class DiprotecConnector
             [$this, 'render_admin_page'],
             'dashicons-database-import',
             56
+        );
+
+        // Submenú de Ajustes
+        add_submenu_page(
+            'diprotec-connector',
+            'Ajustes ERP',
+            'Ajustes',
+            'manage_options',
+            'diprotec-settings',
+            [$this, 'render_settings_page']
         );
     }
 
@@ -175,6 +195,84 @@ class DiprotecConnector
             <h2>Logs de la última ejecución</h2>
             <textarea style="width:100%; height: 150px; background: #f0f0f1; font-family: monospace;"
                 readonly><?php echo esc_textarea($this->get_logs()); ?></textarea>
+        </div>
+        <?php
+    }
+
+    /**
+     * Registra los campos en la base de datos de WordPress
+     */
+    public function register_settings()
+    {
+        register_setting('diprotec_erp_options', 'diprotec_erp_use_mock');
+        register_setting('diprotec_erp_options', 'diprotec_erp_api_url');
+        register_setting('diprotec_erp_options', 'diprotec_erp_api_token');
+        register_setting('diprotec_erp_options', 'diprotec_erp_webhook_secret');
+    }
+
+    /**
+     * Dibuja el formulario HTML de la página de Ajustes
+     */
+    public function render_settings_page()
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        ?>
+        <div class="wrap">
+            <h1>Configuración de Conexión ERP Diprotec</h1>
+            <p>Ingresa las credenciales proporcionadas por el ERP. Por seguridad, estos datos se guardan de forma encriptada en
+                la base de datos.</p>
+
+            <form method="post" action="options.php">
+                <?php
+                // Esta función imprime los campos de seguridad ocultos necesarios
+                settings_fields('diprotec_erp_options');
+                // Hacemos el llamado a las opciones actuales
+                $use_mock = get_option('diprotec_erp_use_mock', '1');
+                $api_url = get_option('diprotec_erp_api_url', 'https://commerce.diprotec.cl');
+                $api_token = get_option('diprotec_erp_api_token', '');
+                $webhook_secret = get_option('diprotec_erp_webhook_secret', '');
+                ?>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><label for="diprotec_erp_use_mock">Modo de Funcionamiento</label></th>
+                        <td>
+                            <select name="diprotec_erp_use_mock" id="diprotec_erp_use_mock">
+                                <option value="1" <?php selected($use_mock, '1'); ?>>Modo Simulación (Mock)</option>
+                                <option value="0" <?php selected($use_mock, '0'); ?>>Modo Producción (API Real)</option>
+                            </select>
+                            <p class="description">Selecciona Producción cuando tengas las credenciales reales.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="diprotec_erp_api_url">URL de la API</label></th>
+                        <td>
+                            <input type="url" name="diprotec_erp_api_url" id="diprotec_erp_api_url"
+                                value="<?php echo esc_attr($api_url); ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="diprotec_erp_api_token">Token de la API (X-API-KEY)</label></th>
+                        <td>
+                            <input type="password" name="diprotec_erp_api_token" id="diprotec_erp_api_token"
+                                value="<?php echo esc_attr($api_token); ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="diprotec_erp_webhook_secret">Secreto del Webhook</label></th>
+                        <td>
+                            <input type="password" name="diprotec_erp_webhook_secret" id="diprotec_erp_webhook_secret"
+                                value="<?php echo esc_attr($webhook_secret); ?>" class="regular-text" />
+                            <p class="description">Utilizado para verificar las peticiones entrantes del ERP (Ej: actualización
+                                de stock).</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <?php submit_button('Guardar Cambios'); ?>
+            </form>
         </div>
         <?php
     }

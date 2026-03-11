@@ -11,12 +11,22 @@ class OrderSyncService
     {
         $this->client = $client;
 
-        // Hook para enviar el pedido cuando pasa a "Procesando" (pago exitoso)
-        add_action('woocommerce_order_status_processing', [$this, 'send_order_to_erp'], 10, 1);
+        // 1. En lugar de enviar la orden inmediatamente, programamos un evento asíncrono (pago exitoso)
+        add_action('woocommerce_order_status_processing', [$this, 'schedule_order_to_erp'], 10, 1);
+
+        // 2. Enganchamos nuestra función real de envío al evento programado
+        add_action('diprotec_async_send_order', [$this, 'send_order_to_erp'], 10, 1);
 
         // Opcional: Permitir envío manual desde acciones del pedido (para pruebas)
         add_action('woocommerce_order_actions', [$this, 'add_manual_sync_action']);
         add_action('woocommerce_order_action_diprotec_send_order', [$this, 'send_order_to_erp']);
+    }
+
+    public function schedule_order_to_erp($order_id)
+    {
+        // Programamos el evento para que se ejecute inmediatamente en el próximo ciclo de wp-cron,
+        // liberando así el proceso de carga de la página del cliente.
+        wp_schedule_single_event(time(), 'diprotec_async_send_order', [$order_id]);
     }
 
     public function add_manual_sync_action($actions)

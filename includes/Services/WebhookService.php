@@ -21,7 +21,8 @@ class WebhookService
     {
         $secret = $request->get_header('X-Diprotec-Webhook-Secret');
 
-        if (!$secret || $secret !== DIPROTEC_ERP_WEBHOOK_SECRET) {
+        // Validamos que exista y usamos hash_equals para mitigar timing attacks
+        if (!$secret || !hash_equals(DIPROTEC_ERP_WEBHOOK_SECRET, $secret)) {
             return new \WP_Error('unauthorized', 'Invalid or missing secret key', ['status' => 403]);
         }
 

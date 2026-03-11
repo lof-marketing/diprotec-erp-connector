@@ -24,6 +24,11 @@ class ProductSyncService
 
         if (!file_exists($this->temp_dir)) {
             wp_mkdir_p($this->temp_dir);
+
+            // Creamos un archivo .htaccess para denegar el acceso público
+            file_put_contents(trailingslashit($this->temp_dir) . '.htaccess', 'Require all denied');
+            // Creamos un index.php vacío por precaución
+            file_put_contents(trailingslashit($this->temp_dir) . 'index.php', '<?php // Silence is golden');
         }
     }
 
