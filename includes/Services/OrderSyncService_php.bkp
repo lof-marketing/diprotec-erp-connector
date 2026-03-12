@@ -11,12 +11,22 @@ class OrderSyncService
     {
         $this->client = $client;
 
-        // 1. Envío INMEDIATO (Síncrono) al momento del pago exitoso
-        add_action('woocommerce_order_status_processing', [$this, 'send_order_to_erp'], 10, 1);
+        // 1. En lugar de enviar la orden inmediatamente, programamos un evento asíncrono (pago exitoso)
+        add_action('woocommerce_order_status_processing', [$this, 'schedule_order_to_erp'], 10, 1);
+
+        // 2. Enganchamos nuestra función real de envío al evento programado
+        add_action('diprotec_async_send_order', [$this, 'send_order_to_erp'], 10, 1);
 
         // Opcional: Permitir envío manual desde acciones del pedido (para pruebas)
         add_action('woocommerce_order_actions', [$this, 'add_manual_sync_action']);
         add_action('woocommerce_order_action_diprotec_send_order', [$this, 'send_order_to_erp']);
+    }
+
+    public function schedule_order_to_erp($order_id)
+    {
+        // Programamos el evento para que se ejecute inmediatamente en el próximo ciclo de wp-cron,
+        // liberando así el proceso de carga de la página del cliente.
+        wp_schedule_single_event(time(), 'diprotec_async_send_order', [$order_id]);
     }
 
     public function add_manual_sync_action($actions)
@@ -63,7 +73,7 @@ class OrderSyncService
         }
 
         // Consultamos la Banda del cliente en el ERP
-        $banda = "BAN0002";
+        $banda = "";
         if (method_exists($this->client, 'getCustomerByRut')) {
             $cliente_erp = $this->client->getCustomerByRut($rut);
             if ($cliente_erp && !empty($cliente_erp['Banda'])) {
@@ -109,7 +119,7 @@ class OrderSyncService
         $comuna_factura = $format_text($order->get_billing_city());
         $direccion_factura = $format_text($order->get_billing_address_1() . ' ' . $order->get_billing_address_2());
 
-        // Despacho
+        // Despacho (Si no existe, cae de vuelta a la de facturación)
         $region_despacho = $order->get_shipping_state() ? $map_region($order->get_shipping_state()) : $region_factura;
         $comuna_despacho = $order->get_shipping_city() ? $format_text($order->get_shipping_city()) : $comuna_factura;
         $direccion_despacho = $format_text($order->get_shipping_address_1() . ' ' . $order->get_shipping_address_2()) ?: $direccion_factura;
@@ -129,7 +139,7 @@ class OrderSyncService
             $id_producto = $erpId ? $erpId : $product->get_sku();
 
             $cantidad = $item->get_quantity();
-            $total_linea = $item->get_total();
+            $total_linea = $item->get_total(); // Total sin impuestos de la línea
             $precio_unitario = $total_linea / $cantidad;
 
             $items_erp[] = [
@@ -199,25 +209,16 @@ class OrderSyncService
             "Productos" => $items_erp
         ];
 
-        $json_payload = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        $logger->info("Payload a enviar al ERP (JSON): \n" . $json_payload, $log_context);
+        // GUARDAR EL LOG DEL PAYLOAD GENERADO
+        $logger->info("Payload a enviar al ERP (JSON): \n" . wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), $log_context);
 
         // ==========================================
         // 5. ENVIAR AL ERP Y PROCESAR RESPUESTA
         // ==========================================
         $response = $this->client->createOrder($payload);
-        $json_response = wp_json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
-        // Novedad: Guardamos el pedido completo en base de datos para mostrarlo en el menú de Diprotec Admin
-        $log_data = [
-            'order_id' => $order_id,
-            'date' => current_time('mysql'),
-            'payload' => $json_payload,
-            'response' => $json_response
-        ];
-        update_option('diprotec_last_order_log', $log_data);
-
-        $logger->info("Respuesta recibida del ERP: \n" . $json_response, $log_context);
+        // GUARDAR EL LOG DE LA RESPUESTA
+        $logger->info("Respuesta recibida del ERP: \n" . wp_json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), $log_context);
 
         if (isset($response['Respuesta']) && $response['Respuesta'] === 'TRANSACCION_OK') {
             $erp_identifier = isset($response['Data']['Identificador']) ? $response['Data']['Identificador'] : 'ENVIADO';

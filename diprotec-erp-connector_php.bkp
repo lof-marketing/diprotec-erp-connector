@@ -161,19 +161,6 @@ class DiprotecConnector
 
     public function render_admin_page()
     {
-        // Rescatamos el último log de la base de datos
-        $last_order_log = get_option('diprotec_last_order_log');
-        $order_log_text = "No hay registros de pedidos enviados aún. Realiza una compra de prueba para ver los datos aquí.";
-
-        if ($last_order_log && is_array($last_order_log)) {
-            $order_log_text = "=== ÚLTIMO PEDIDO ENVIADO AL ERP ===\n";
-            $order_log_text .= "Orden ID WooCommerce: #" . esc_html($last_order_log['order_id']) . "\n";
-            $order_log_text .= "Fecha de envío: " . esc_html($last_order_log['date']) . "\n\n";
-            $order_log_text .= "--- 1. PAYLOAD (Lo que se envió al ERP) ---\n";
-            $order_log_text .= esc_html($last_order_log['payload']) . "\n\n";
-            $order_log_text .= "--- 2. RESPUESTA (Lo que devolvió el ERP) ---\n";
-            $order_log_text .= esc_html($last_order_log['response']);
-        }
         ?>
         <div class="wrap">
             <h1>Conector ERP Diprotec (Estado: <?php echo DIPROTEC_ERP_USE_MOCK ? 'MODO SIMULACIÓN' : 'MODO PRODUCCIÓN'; ?>)
@@ -205,15 +192,7 @@ class DiprotecConnector
             </div>
 
             <hr>
-            <h2>🔍 Monitor de Envío de Pedidos (JSON Debugger)</h2>
-            <p>Aquí puedes auditar el JSON exacto de la última orden de compra que se intentó enviar al ERP y qué fue lo que
-                este respondió.</p>
-            <textarea
-                style="width:100%; height: 400px; background: #1d2327; color: #68de7d; font-family: monospace; padding: 15px;"
-                readonly><?php echo $order_log_text; ?></textarea>
-
-            <hr>
-            <h2>Logs de la última ejecución (Sincronización de Productos)</h2>
+            <h2>Logs de la última ejecución</h2>
             <textarea style="width:100%; height: 150px; background: #f0f0f1; font-family: monospace;"
                 readonly><?php echo esc_textarea($this->get_logs()); ?></textarea>
         </div>
